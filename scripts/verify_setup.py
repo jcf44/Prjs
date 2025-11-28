@@ -130,6 +130,26 @@ async def verify():
                         logger.warning("RAG did not cite sources (might be expected if model missing)")
                 else:
                     logger.warning("RAG chat query failed", status=response.status_code, response=response.text)
+                    
+                # Test List Documents
+                logger.info("Testing List Documents...")
+                response = client.get("/v1/documents/")
+                if response.status_code == 200:
+                    docs = response.json()
+                    logger.info("List documents passed", count=len(docs), docs=docs)
+                    
+                    # Test Delete Document
+                    if len(docs) > 0:
+                        source_id = docs[0]["source_id"]
+                        logger.info("Testing Delete Document...", source_id=source_id)
+                        response = client.delete(f"/v1/documents/{source_id}")
+                        if response.status_code == 200:
+                            logger.info("Delete document passed", response=response.json())
+                        else:
+                            logger.warning("Delete document failed", status=response.status_code, response=response.text)
+                else:
+                    logger.warning("List documents failed", status=response.status_code, response=response.text)
+                    
             else:
                 logger.warning("Ingestion failed", status=response.status_code, response=response.text)
         except Exception as e:

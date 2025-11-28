@@ -22,15 +22,20 @@ class VectorDBService:
         )
 
     async def _get_embeddings(self, texts: List[str]) -> List[List[float]]:
-        """Generate embeddings using Ollama AsyncClient"""
-        embeddings = []
-        for text in texts:
+        """Generate embeddings using Ollama AsyncClient with parallel execution"""
+        import asyncio
+        
+        async def get_single_embedding(text):
             try:
                 response = await self.ollama_client.embeddings(model=self.embedding_model, prompt=text)
-                embeddings.append(response["embedding"])
+                return response["embedding"]
             except Exception as e:
                 logger.error("Failed to generate embedding", error=str(e), text_preview=text[:50])
                 raise
+
+        # Create tasks for all texts
+        tasks = [get_single_embedding(text) for text in texts]
+        embeddings = await asyncio.gather(*tasks)
         return embeddings
 
     async def add_documents(self, documents: List[str], metadatas: List[Dict[str, Any]], ids: List[str]):
@@ -77,6 +82,35 @@ class VectorDBService:
         except Exception as e:
             logger.error("Failed to delete document", error=str(e))
             raise
+
+    async def list_documents(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """List unique documents in the vector DB"""
+        try:
+            # ChromaDB doesn't have a direct "SELECT DISTINCT" for metadata.
+            # We have to fetch all (or limit) and aggregate.
+            # This is not efficient for large datasets but works for small/medium.
+            # Ideally, we would maintain a separate "documents" collection or SQL table.
+            
+            # Fetch metadatas only
+            result = self.collection.get(include=["metadatas"])
+            metadatas = result["metadatas"]
+            
+            unique_docs = {}
+            for meta in metadatas:
+                source_id = meta.get("source_id")
+                if source_id and source_id not in unique_docs:
+                    unique_docs[source_id] = {
+                        "source_id": source_id,
+                        "filename": meta.get("filename", "unknown"),
+                        "source": meta.get("source", "unknown"),
+                        "user_profile": meta.get("user_profile", "default"),
+                        "created_at": meta.get("created_at", None) # If we added this
+                    }
+            
+            return list(unique_docs.values())[:limit]
+        except Exception as e:
+            logger.error("Failed to list documents", error=str(e))
+            return []
 
 _vector_db_service: VectorDBService | None = None
 

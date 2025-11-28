@@ -28,6 +28,12 @@ class Settings(BaseSettings):
     # RAG
     CHROMA_DB_PATH: str = os.path.join(os.path.expanduser("~"), ".wendy", "chroma_db")
     
+    # Voice
+    WAKE_WORD_MODEL_PATH: str = "" # Empty means default or auto-download
+    STT_MODEL_SIZE: str = "base.en"
+    TTS_VOICE: str = "en_US-lessac-medium"
+    AUDIO_DEVICE_INDEX: Optional[int] = None
+    
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 @lru_cache
