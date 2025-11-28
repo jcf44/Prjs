@@ -1,0 +1,30 @@
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from functools import lru_cache
+from typing import Optional
+
+class Settings(BaseSettings):
+    APP_NAME: str = "Wendy"
+    VERSION: str = "0.1.0"
+    DEBUG: bool = False
+    
+    # Server
+    HOST: str = "127.0.0.1"
+    PORT: int = 8181
+    
+    # Database
+    MONGODB_URL: str = "mongodb://localhost:27017"
+    MONGODB_DB_NAME: str = "wendy"
+    
+    # Ollama
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
+    
+    # Models
+    DOC_BRAIN_MODEL: str = "qwen3:32b-q4_K_M"
+    FAST_BRAIN_MODEL: str = "qwen2.5:14b"
+    VISION_MODEL: str = "qwen2.5-vl:7b"
+    
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+
+@lru_cache
+def get_settings():
+    return Settings()
