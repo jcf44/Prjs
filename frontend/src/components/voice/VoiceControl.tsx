@@ -32,8 +32,14 @@ export function VoiceControl() {
     const checkStatus = useCallback(async () => {
         try {
             const response = await voiceApi.status();
-            const { listening_for_command } = response.data;
-            setVoiceStatus(listening_for_command ? 'listening' : 'processing');
+            const { listening_for_command, is_running } = response.data;
+            if (!is_running) {
+                setVoiceStatus('idle');
+            } else if (listening_for_command) {
+                setVoiceStatus('listening');
+            } else {
+                setVoiceStatus('waiting'); // Waiting for wake word or processing
+            }
         } catch (error) {
             console.error(error);
         }
@@ -80,7 +86,11 @@ export function VoiceControl() {
                     {isVoiceActive ? (
                         <>
                             <Activity className="h-4 w-4 animate-bounce" />
-                            <span>{voiceStatus === 'listening' ? 'Listening...' : 'Processing...'}</span>
+                            <span>
+                                {voiceStatus === 'listening' ? 'Listening...' :
+                                    voiceStatus === 'waiting' ? 'Say "Hey Wendy"' :
+                                        'Processing...'}
+                            </span>
                         </>
                     ) : (
                         <span>Click to start</span>
