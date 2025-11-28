@@ -3,7 +3,7 @@ from chromadb.config import Settings as ChromaSettings
 from backend.config import get_settings
 import structlog
 from typing import List, Dict, Any, Optional
-import ollama
+from ollama import AsyncClient
 
 logger = structlog.get_logger()
 
@@ -13,6 +13,7 @@ class VectorDBService:
         self.client = chromadb.PersistentClient(path=self.settings.CHROMA_DB_PATH)
         self.embedding_model = self.settings.EMBEDDING_MODEL
         self.collection_name = "wendy_documents"
+        self.ollama_client = AsyncClient(host=self.settings.OLLAMA_BASE_URL)
         
         # Initialize collection
         self.collection = self.client.get_or_create_collection(
@@ -20,12 +21,12 @@ class VectorDBService:
             metadata={"hnsw:space": "cosine"}
         )
 
-    def _get_embeddings(self, texts: List[str]) -> List[List[float]]:
-        """Generate embeddings using Ollama"""
+    async def _get_embeddings(self, texts: List[str]) -> List[List[float]]:
+        """Generate embeddings using Ollama AsyncClient"""
         embeddings = []
         for text in texts:
             try:
-                response = ollama.embeddings(model=self.embedding_model, prompt=text)
+                response = await self.ollama_client.embeddings(model=self.embedding_model, prompt=text)
                 embeddings.append(response["embedding"])
             except Exception as e:
                 logger.error("Failed to generate embedding", error=str(e), text_preview=text[:50])
@@ -37,7 +38,7 @@ class VectorDBService:
         logger.info("Adding documents to vector DB", count=len(documents))
         
         try:
-            embeddings = self._get_embeddings(documents)
+            embeddings = await self._get_embeddings(documents)
             self.collection.add(
                 documents=documents,
                 embeddings=embeddings,
@@ -54,7 +55,8 @@ class VectorDBService:
         logger.info("Searching vector DB", query=query)
         
         try:
-            query_embedding = self._get_embeddings([query])[0]
+            query_embeddings = await self._get_embeddings([query])
+            query_embedding = query_embeddings[0]
             results = self.collection.query(
                 query_embeddings=[query_embedding],
                 n_results=n_results

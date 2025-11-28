@@ -101,8 +101,21 @@ async def verify():
             if response.status_code == 200:
                 logger.info("Ingestion passed", response=response.json())
                 
-                # Test RAG Query
-                logger.info("Testing RAG Query...")
+                # Test RAG Endpoint
+                logger.info("Testing RAG Endpoint...")
+                rag_query_payload = {
+                    "query": "Who created Wendy?",
+                    "model": "qwen3:32b-q4_K_M"
+                }
+                response = client.post("/v1/documents/query", json=rag_query_payload)
+                if response.status_code == 200:
+                    data = response.json()
+                    logger.info("RAG endpoint passed", response=data)
+                else:
+                    logger.warning("RAG endpoint failed", status=response.status_code, response=response.text)
+
+                # Test RAG Query via Chat
+                logger.info("Testing RAG Query via Chat...")
                 rag_payload = {
                     "message": "Who created Wendy?",
                     "model": "qwen3:32b-q4_K_M" # Force Doc Brain to trigger RAG logic
@@ -110,13 +123,13 @@ async def verify():
                 response = client.post("/v1/chat", json=rag_payload)
                 if response.status_code == 200:
                     data = response.json()
-                    logger.info("RAG query passed", response=data)
+                    logger.info("RAG chat query passed", response=data)
                     if "sources" in data and len(data["sources"]) > 0:
                         logger.info("RAG successfully cited sources", sources=data["sources"])
                     else:
                         logger.warning("RAG did not cite sources (might be expected if model missing)")
                 else:
-                    logger.warning("RAG query failed", status=response.status_code, response=response.text)
+                    logger.warning("RAG chat query failed", status=response.status_code, response=response.text)
             else:
                 logger.warning("Ingestion failed", status=response.status_code, response=response.text)
         except Exception as e:

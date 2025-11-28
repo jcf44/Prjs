@@ -8,6 +8,7 @@ from backend.services.rag import get_rag_service, RAGService
 from backend.domain.models import Message, MessageRole
 import structlog
 import uuid
+import re
 
 router = APIRouter(prefix="/v1", tags=["chat"])
 logger = structlog.get_logger()
@@ -99,23 +100,39 @@ async def simple_chat(
         if model == "auto":
             model = router_service.route(request.message)
             
-        # 5. Check for RAG trigger (simple heuristic for now)
-        # In future, RouterService could decide this
-        use_rag = "doc" in model or "brain" in model # Heuristic: if routed to complex model, maybe use RAG?
-        # Better heuristic: check if user asks about "document" or "file" or "context"
-        # For now, let's make it explicit in request or just always try RAG if model is DOC_BRAIN?
-        # Let's keep it simple: if model is DOC_BRAIN, we try RAG.
+        # 5. Check for RAG trigger
+        use_rag = request.model == "rag" # Explicit flag if model is "rag"
         
+        # Heuristic detection
+        if not use_rag:
+             rag_triggers = [
+                r"in my (documents?|files?|notes?)",
+                r"according to",
+                r"what does .* say about",
+                r"find .* in",
+                r"search (for|my)",
+            ]
+             if any(re.search(p, request.message, re.IGNORECASE) for p in rag_triggers):
+                 use_rag = True
+                 logger.info("RAG triggered by heuristic")
+        
+        # Also trigger if model is DOC_BRAIN (legacy behavior)
+        if "qwen3" in model:
+            use_rag = True
+
         assistant_content = ""
         sources = []
         
         # 6. Call LLM (with or without RAG)
-        if "qwen3" in model: # Assuming DOC_BRAIN is qwen3
-             rag_response = await rag_service.query(request.message, model=model)
+        if use_rag:
+             # Ensure we use a capable model for RAG
+             rag_model = model if model != "auto" else router_service.doc_brain_model
+             rag_response = await rag_service.query(request.message, model=rag_model)
              assistant_content = rag_response["answer"]
              sources = [meta.get("filename", "unknown") for meta in rag_response.get("sources", [])]
              # Deduplicate sources
              sources = list(set(sources))
+             model = rag_model # Update model used for logging
         else:
             # Standard Chat
             history = [{"role": "system", "content": WENDY_SYSTEM_PROMPT}]

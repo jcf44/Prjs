@@ -2,6 +2,8 @@ import os
 from typing import List, Dict, Any
 import pymupdf
 import docx
+import openpyxl
+import hashlib
 from backend.services.vector_db import get_vector_db_service, VectorDBService
 import structlog
 import uuid
@@ -19,6 +21,23 @@ class IngestionService:
         logger.info("Processing file", file_path=file_path)
         
         try:
+            # Calculate hash to check for duplicates
+            with open(file_path, "rb") as f:
+                file_hash = hashlib.sha256(f.read()).hexdigest()
+            
+            # Check for existing document by hash (using metadata filter if possible, or we need a way to query by metadata)
+            # ChromaDB supports where filter.
+            # We need to implement find_by_hash in VectorDBService or just query here.
+            # Let's add find_by_hash to VectorDBService later or just assume we can query.
+            # For now, let's skip the check or implement a basic check if we can.
+            # Actually, let's implement the check by querying the collection.
+            
+            existing = self.vector_db.collection.get(where={"file_hash": file_hash}, limit=1)
+            if existing and existing['ids']:
+                logger.info("Document already indexed", hash=file_hash)
+                # Return the source_id from the existing document metadata
+                return existing['metadatas'][0]['source_id']
+
             text = self._extract_text(file_path)
             chunks = self._chunk_text(text)
             
@@ -32,7 +51,8 @@ class IngestionService:
                 "source": file_path,
                 "filename": os.path.basename(file_path),
                 "user_profile": user_profile,
-                "source_id": source_id
+                "source_id": source_id,
+                "file_hash": file_hash
             })
             
             for i, chunk in enumerate(chunks):
@@ -63,6 +83,16 @@ class IngestionService:
         elif ext == ".docx":
             doc = docx.Document(file_path)
             return "\n".join([para.text for para in doc.paragraphs])
+        elif ext == ".xlsx":
+            wb = openpyxl.load_workbook(file_path, data_only=True)
+            text_parts = []
+            for sheet in wb.worksheets:
+                text_parts.append(f"Sheet: {sheet.title}")
+                for row in sheet.iter_rows(values_only=True):
+                    row_text = " | ".join(str(cell) if cell else "" for cell in row)
+                    if row_text.strip():
+                        text_parts.append(row_text)
+            return "\n".join(text_parts)
         else:
             raise ValueError(f"Unsupported file type: {ext}")
 

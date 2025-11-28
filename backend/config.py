@@ -1,6 +1,7 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
 from typing import Optional
+import os
 
 class Settings(BaseSettings):
     APP_NAME: str = "Wendy"
@@ -25,7 +26,7 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL: str = "nomic-embed-text"
     
     # RAG
-    CHROMA_DB_PATH: str = "./chroma_db"
+    CHROMA_DB_PATH: str = os.path.join(os.path.expanduser("~"), ".wendy", "chroma_db")
     
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 

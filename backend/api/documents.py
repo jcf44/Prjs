@@ -36,3 +36,23 @@ async def ingest_document(
     except Exception as e:
         logger.error("Document ingestion failed", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
+
+from pydantic import BaseModel
+from backend.services.rag import get_rag_service, RAGService
+
+class RAGQueryRequest(BaseModel):
+    query: str
+    limit: int = 5
+    model: Optional[str] = None
+
+@router.post("/query")
+async def rag_query(
+    request: RAGQueryRequest,
+    rag_service: RAGService = Depends(get_rag_service)
+):
+    try:
+        results = await rag_service.query(request.query, model=request.model)
+        return results
+    except Exception as e:
+        logger.error("RAG query failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
