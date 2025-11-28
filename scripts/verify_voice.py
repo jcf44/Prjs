@@ -17,12 +17,13 @@ logger = structlog.get_logger()
 async def verify_voice():
     logger.info("Starting Voice Pipeline Verification...")
     
-    # 1. Test TTS (Mock)
+    # 1. Test TTS (Sherpa-ONNX)
     try:
         from backend.services.voice.tts import get_tts_service
+        # This might take a while to download models on first run
         tts = get_tts_service()
         logger.info("Testing TTS...")
-        audio_bytes = tts.synthesize("Hello, I am Wendy.")
+        audio_bytes = tts.synthesize("Hello, I am Wendy. I am running offline.")
         if len(audio_bytes) > 0:
             logger.info("TTS generation successful", bytes=len(audio_bytes))
             # Save to file for manual check
@@ -34,7 +35,7 @@ async def verify_voice():
     except Exception as e:
         logger.error("TTS test failed", error=str(e))
 
-    # 2. Test STT (Mock/Real)
+    # 2. Test STT (Faster-Whisper)
     try:
         from backend.services.voice.stt import get_stt_service
         stt = get_stt_service()
@@ -50,14 +51,14 @@ async def verify_voice():
     except Exception as e:
         logger.error("STT test failed", error=str(e))
 
-    # 3. Test Wake Word (Mock/Real)
+    # 3. Test Wake Word (Sherpa-ONNX)
     try:
         from backend.services.voice.wakeword import get_wakeword_service
         ww = get_wakeword_service()
         logger.info("Testing Wake Word...")
         
         # Dummy audio chunk (80ms)
-        dummy_chunk = np.zeros(1280, dtype=np.int16)
+        dummy_chunk = np.zeros(1280, dtype=np.float32)
         detected = ww.detect(dummy_chunk)
         logger.info("Wake word detection (silence)", detected=detected)
         
