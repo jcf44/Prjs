@@ -49,7 +49,7 @@ class IngestionService:
             base_metadata = metadata or {}
             base_metadata.update({
                 "source": file_path,
-                "filename": os.path.basename(file_path),
+                "filename": base_metadata.pop("original_filename", None) or os.path.basename(file_path),
                 "user_profile": user_profile,
                 "source_id": source_id,
                 "file_hash": file_hash

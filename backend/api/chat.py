@@ -33,6 +33,7 @@ class SimpleChatRequest(BaseModel):
     conversation_id: Optional[str] = None
     user_profile: str = "default"
     model: str = "auto"
+    stream: bool = False
 
 @router.post("/chat/completions")
 async def chat_completions(
@@ -153,7 +154,7 @@ async def simple_chat(
         await memory.add_message(conversation_id, assistant_msg)
         
         return {
-            "response": assistant_content,
+            "answer": assistant_content,
             "conversation_id": conversation_id,
             "model_used": model,
             "sources": sources

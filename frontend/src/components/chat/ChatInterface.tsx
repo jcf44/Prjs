@@ -9,6 +9,7 @@ export function ChatInterface() {
     const {
         addMessage,
         setIsLoading,
+        isLoading,
         selectedModel,
         useRag,
         messages
@@ -29,7 +30,7 @@ export function ChatInterface() {
             // Add assistant message
             addMessage({
                 role: 'assistant',
-                content: response.answer || response.message || "No response",
+                content: response.answer || "No response",
                 sources: response.sources
             });
 
@@ -53,7 +54,7 @@ export function ChatInterface() {
 
             <MessageList />
 
-            <ChatInput onSend={handleSend} disabled={false} />
+            <ChatInput onSend={handleSend} disabled={isLoading} />
         </div>
     );
 }
