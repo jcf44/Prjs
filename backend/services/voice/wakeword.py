@@ -89,10 +89,13 @@ class WakeWordService:
         self.stream.accept_waveform(16000, audio_chunk)
         
         while self.spotter.is_ready(self.stream):
-            self.spotter.decode(self.stream)
-            result = self.spotter.get_result(self.stream)
-            if result.keyword:
-                logger.info("Wake word detected!", keyword=result.keyword)
+            self.spotter.decode_stream(self.stream)  # Fixed: decode_stream instead of decode
+        
+        result = self.spotter.get_result(self.stream)
+        if result:
+            keyword = getattr(result, 'keyword', None) or getattr(result, 'keywords', None)
+            if keyword:
+                logger.info("Wake word detected!", keyword=keyword)
                 return True
         
         return False
