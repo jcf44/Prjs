@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     DOC_BRAIN_MODEL: str = "qwen3:32b-q4_K_M"
     FAST_BRAIN_MODEL: str = "qwen2.5:14b"
     VISION_MODEL: str = "qwen2.5-vl:7b"
+    EMBEDDING_MODEL: str = "nomic-embed-text"
+    
+    # RAG
+    CHROMA_DB_PATH: str = "./chroma_db"
     
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 

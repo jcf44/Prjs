@@ -4,6 +4,7 @@ from typing import List, Optional, Dict, Any
 from backend.services.llm import get_llm_service, LLMService
 from backend.services.memory import get_memory_service, MemoryService
 from backend.services.router import get_router_service, RouterService
+from backend.services.rag import get_rag_service, RAGService
 from backend.domain.models import Message, MessageRole
 import structlog
 import uuid
@@ -70,7 +71,8 @@ async def simple_chat(
     request: SimpleChatRequest,
     llm: LLMService = Depends(get_llm_service),
     memory: MemoryService = Depends(get_memory_service),
-    router_service: RouterService = Depends(get_router_service)
+    router_service: RouterService = Depends(get_router_service),
+    rag_service: RAGService = Depends(get_rag_service)
 ):
     try:
         conversation_id = request.conversation_id
@@ -97,31 +99,47 @@ async def simple_chat(
         if model == "auto":
             model = router_service.route(request.message)
             
-        # 5. Prepare messages for LLM
-        # Add system prompt
-        history = [{"role": "system", "content": WENDY_SYSTEM_PROMPT}]
-        history.extend([
-            {"role": msg.role.value, "content": msg.content} 
-            for msg in conversation.messages
-        ])
+        # 5. Check for RAG trigger (simple heuristic for now)
+        # In future, RouterService could decide this
+        use_rag = "doc" in model or "brain" in model # Heuristic: if routed to complex model, maybe use RAG?
+        # Better heuristic: check if user asks about "document" or "file" or "context"
+        # For now, let's make it explicit in request or just always try RAG if model is DOC_BRAIN?
+        # Let's keep it simple: if model is DOC_BRAIN, we try RAG.
         
-        # 6. Call LLM
-        response = await llm.chat(model=model, messages=history, stream=False)
-        assistant_content = response['message']['content']
+        assistant_content = ""
+        sources = []
         
+        # 6. Call LLM (with or without RAG)
+        if "qwen3" in model: # Assuming DOC_BRAIN is qwen3
+             rag_response = await rag_service.query(request.message, model=model)
+             assistant_content = rag_response["answer"]
+             sources = [meta.get("filename", "unknown") for meta in rag_response.get("sources", [])]
+             # Deduplicate sources
+             sources = list(set(sources))
+        else:
+            # Standard Chat
+            history = [{"role": "system", "content": WENDY_SYSTEM_PROMPT}]
+            history.extend([
+                {"role": msg.role.value, "content": msg.content} 
+                for msg in conversation.messages
+            ])
+            response = await llm.chat(model=model, messages=history, stream=False)
+            assistant_content = response['message']['content']
+
         # 7. Add assistant message to memory
         assistant_msg = Message(
             role=MessageRole.ASSISTANT, 
             content=assistant_content,
             model_used=model,
-            tokens_used=response.get('eval_count', 0)
+            sources=sources
         )
         await memory.add_message(conversation_id, assistant_msg)
         
         return {
             "response": assistant_content,
             "conversation_id": conversation_id,
-            "model_used": model
+            "model_used": model,
+            "sources": sources
         }
         
     except Exception as e:

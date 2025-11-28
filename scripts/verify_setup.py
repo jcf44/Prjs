@@ -3,6 +3,7 @@ import httpx
 from backend.main import app
 from backend.config import get_settings
 import structlog
+import os
 
 logger = structlog.get_logger()
 
@@ -86,7 +87,45 @@ async def verify():
         except Exception as e:
             logger.error("Stateful chat error", error=str(e))
 
-        # 4. Vision (Mock Test)
+        # 4. Document Ingestion & RAG
+        logger.info("Testing Document Ingestion...")
+        # Create a dummy text file
+        with open("test_doc.txt", "w") as f:
+            f.write("Wendy is a local AI assistant created by the user. She uses Ollama for intelligence.")
+            
+        try:
+            with open("test_doc.txt", "rb") as f:
+                files = {"file": ("test_doc.txt", f, "text/plain")}
+                response = client.post("/v1/documents/ingest", files=files)
+                
+            if response.status_code == 200:
+                logger.info("Ingestion passed", response=response.json())
+                
+                # Test RAG Query
+                logger.info("Testing RAG Query...")
+                rag_payload = {
+                    "message": "Who created Wendy?",
+                    "model": "qwen3:32b-q4_K_M" # Force Doc Brain to trigger RAG logic
+                }
+                response = client.post("/v1/chat", json=rag_payload)
+                if response.status_code == 200:
+                    data = response.json()
+                    logger.info("RAG query passed", response=data)
+                    if "sources" in data and len(data["sources"]) > 0:
+                        logger.info("RAG successfully cited sources", sources=data["sources"])
+                    else:
+                        logger.warning("RAG did not cite sources (might be expected if model missing)")
+                else:
+                    logger.warning("RAG query failed", status=response.status_code, response=response.text)
+            else:
+                logger.warning("Ingestion failed", status=response.status_code, response=response.text)
+        except Exception as e:
+            logger.error("RAG test error", error=str(e))
+        finally:
+            if os.path.exists("test_doc.txt"):
+                os.remove("test_doc.txt")
+
+        # 5. Vision (Mock Test)
         logger.info("Testing /v1/vision/analyze endpoint...")
         # Tiny 1x1 transparent GIF base64
         dummy_image = "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"

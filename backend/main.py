@@ -20,7 +20,7 @@ async def lifespan(app: FastAPI):
     await db.close()
     logger.info("Shutting down Wendy Backend...")
 
-from backend.api import chat, vision
+from backend.api import chat, vision, documents
 
 def create_app() -> FastAPI:
     settings = get_settings()
@@ -33,6 +33,7 @@ def create_app() -> FastAPI:
     
     app.include_router(chat.router)
     app.include_router(vision.router)
+    app.include_router(documents.router)
     
     @app.get("/health")
     async def health_check(llm: LLMService = Depends(get_llm_service)):
