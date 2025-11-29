@@ -1,8 +1,10 @@
+"use client";
+
 import React, { useEffect, useState } from 'react';
 import { documentsApi, Document } from '@/lib/api';
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { FileText, Trash2, Upload } from "lucide-react";
+import { FileText, Trash2, Upload, FileCode, FileImage, FileSpreadsheet, FileType, File } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 
@@ -54,6 +56,41 @@ export function DocumentList() {
         }
     };
 
+    const getFileIcon = (filename: string) => {
+        const ext = filename.split('.').pop()?.toLowerCase();
+        const className = "h-4 w-4 shrink-0 text-primary";
+
+        switch (ext) {
+            case 'pdf':
+                return <FileType className={className} />;
+            case 'doc':
+            case 'docx':
+                return <FileText className={className} />;
+            case 'xls':
+            case 'xlsx':
+            case 'csv':
+                return <FileSpreadsheet className={className} />;
+            case 'jpg':
+            case 'jpeg':
+            case 'png':
+            case 'gif':
+            case 'webp':
+                return <FileImage className={className} />;
+            case 'py':
+            case 'js':
+            case 'ts':
+            case 'tsx':
+            case 'jsx':
+            case 'html':
+            case 'css':
+            case 'json':
+            case 'md':
+                return <FileCode className={className} />;
+            default:
+                return <File className={className} />;
+        }
+    };
+
     return (
         <div className="flex flex-col h-full bg-card border rounded-lg overflow-hidden">
             <div className="p-4 border-b flex items-center justify-between">
@@ -72,7 +109,7 @@ export function DocumentList() {
                 </div>
             </div>
 
-            <ScrollArea className="flex-1">
+            <ScrollArea className="flex-1 [&>[data-radix-scroll-area-viewport]]:!block">
                 <div className="p-2 space-y-2">
                     {documents.length === 0 ? (
                         <div className="text-center text-muted-foreground p-8 text-sm">
@@ -80,9 +117,9 @@ export function DocumentList() {
                         </div>
                     ) : (
                         documents.map((doc) => (
-                            <div key={doc.source_id} className="flex items-center justify-between p-3 rounded-md hover:bg-muted/50 border">
-                                <div className="flex items-center gap-3 overflow-hidden">
-                                    <FileText className="h-4 w-4 shrink-0 text-primary" />
+                            <div key={doc.source_id} className="flex items-center justify-between p-3 rounded-md hover:bg-muted/50 border group">
+                                <div className="flex items-center gap-3 overflow-hidden flex-1 w-0 mr-2">
+                                    {getFileIcon(doc.filename)}
                                     <div className="truncate text-sm font-medium" title={doc.filename}>
                                         {doc.filename}
                                     </div>
@@ -90,7 +127,7 @@ export function DocumentList() {
                                 <Button
                                     variant="ghost"
                                     size="icon"
-                                    className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                    className="h-8 w-8 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
                                     onClick={() => handleDelete(doc.source_id)}
                                 >
                                     <Trash2 className="h-4 w-4" />

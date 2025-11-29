@@ -18,7 +18,7 @@ export function MessageList() {
     }, [messages, isLoading]);
 
     return (
-        <ScrollArea className="flex-1 p-4" ref={scrollRef}>
+        <ScrollArea className="flex-1 min-h-0 p-4" ref={scrollRef}>
             <div className="space-y-4 pb-4">
                 {messages.map((msg, index) => (
                     <MessageItem key={index} message={msg} />

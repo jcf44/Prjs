@@ -1,10 +1,13 @@
 from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional
 import asyncio
+import json
 import structlog
 
 from backend.services.voice import get_orchestrator, VoiceOrchestrator
+from backend.services.voice.event_broadcaster import get_broadcaster
 
 router = APIRouter(prefix="/v1/voice", tags=["voice"])
 logger = structlog.get_logger()
@@ -155,3 +158,53 @@ async def test_wakeword():
     except Exception as e:
         logger.error("Wake word test failed", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/events")
+async def voice_events():
+    """
+    SSE endpoint for streaming voice conversation events in real-time
+    Clients receive events when voice commands are transcribed and responses generated
+    """
+    from backend.services.voice.event_broadcaster import set_main_loop
+    
+    # Store the main event loop reference for emit_sync to use
+    set_main_loop()
+    
+    broadcaster = get_broadcaster()
+    
+    async def event_generator():
+        """Generate SSE formatted events"""
+        queue = await broadcaster.subscribe()
+        try:
+            logger.info("SSE client connected to voice events")
+            
+            # Send initial connection event
+            yield f"data: {json.dumps({'type': 'connected', 'message': 'Voice events stream connected'})}\n\n"
+            
+            while True:
+                # Wait for events from the broadcaster
+                event = await queue.get()
+                
+                # Format as SSE: data: {json}\n\n
+                event_json = json.dumps(event)
+                yield f"data: {event_json}\n\n"
+                
+        except asyncio.CancelledError:
+            logger.info("SSE client disconnected")
+            await broadcaster.unsubscribe(queue)
+            raise
+        except Exception as e:
+            logger.error("Error in SSE event stream", error=str(e))
+            await broadcaster.unsubscribe(queue)
+            raise
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # Disable nginx buffering
+        }
+    )

@@ -44,7 +44,7 @@ export function ChatInterface() {
     };
 
     return (
-        <div className="flex flex-col h-full w-full max-w-3xl mx-auto border-x bg-background shadow-sm">
+        <div className="flex flex-col h-full w-full max-w-3xl mx-auto border-x bg-background shadow-sm overflow-hidden">
             <div className="flex items-center justify-between p-4 border-b">
                 <h2 className="font-semibold">Wendy Chat</h2>
                 <div className="text-xs text-muted-foreground">

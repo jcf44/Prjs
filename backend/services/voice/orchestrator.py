@@ -7,6 +7,7 @@ from backend.services.voice.audio import get_audio_service, AudioService
 from backend.services.voice.wakeword import get_wakeword_service, WakeWordService
 from backend.services.voice.stt import get_stt_service, STTService
 from backend.services.voice.tts import get_tts_service, TTSService
+from backend.services.voice.event_broadcaster import get_broadcaster
 from backend.services.llm import get_llm_service, LLMService
 from backend.config import get_settings
 
@@ -250,6 +251,8 @@ class VoiceOrchestrator:
     def _process_command(self, audio_data: np.ndarray):
         """Process the recorded voice command (Sync, runs in thread)"""
         try:
+            broadcaster = get_broadcaster()
+            
             # Step 1: Speech-to-Text
             logger.info("Transcribing audio...")
             text = self.stt_service.transcribe(audio_data)
@@ -259,6 +262,12 @@ class VoiceOrchestrator:
                 logger.info("No speech detected")
                 self.is_processing = False
                 return
+            
+            # Emit transcription event (user message)
+            broadcaster.emit_sync("transcription", {
+                "role": "user",
+                "content": text
+            })
 
             # Step 2: LLM Processing
             logger.info("Getting response from LLM...")
@@ -276,6 +285,12 @@ class VoiceOrchestrator:
             
             response_text = response['message']['content']
             logger.info("LLM response", response=response_text[:100] + "..." if len(response_text) > 100 else response_text)
+            
+            # Emit response event (assistant message)
+            broadcaster.emit_sync("response", {
+                "role": "assistant",
+                "content": response_text
+            })
 
             # Step 3: Text-to-Speech
             logger.info("Synthesizing speech...")

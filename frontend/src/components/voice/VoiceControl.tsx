@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useCallback } from 'react';
 import { Button } from "@/components/ui/button";
 import { Mic, MicOff, Activity } from "lucide-react";
 import { useStore } from '@/lib/store';
+import { useVoiceEvents } from '@/hooks/useVoiceEvents';
 import { voiceApi } from '@/lib/api';
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -9,6 +10,9 @@ import { cn } from "@/lib/utils";
 export function VoiceControl() {
     const { isVoiceActive, setIsVoiceActive, voiceStatus, setVoiceStatus } = useStore();
     const intervalRef = useRef<NodeJS.Timeout | null>(null);
+
+    // Connect to voice events SSE stream
+    useVoiceEvents(isVoiceActive);
 
     const startVoice = useCallback(async () => {
         try {
