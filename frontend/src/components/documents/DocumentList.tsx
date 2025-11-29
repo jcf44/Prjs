@@ -7,6 +7,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { FileText, Trash2, Upload, FileCode, FileImage, FileSpreadsheet, FileType, File, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
+import { ExcelIcon, MarkdownIcon, PdfIcon, WordIcon } from "./DocIcons";
 
 import { useStore } from "@/lib/store";
 
@@ -66,24 +67,24 @@ export function DocumentList() {
 
     const getFileIcon = (filename: string) => {
         const ext = filename.split('.').pop()?.toLowerCase();
-        const className = "h-4 w-4 shrink-0 text-primary";
+        const className = "h-5 w-5 shrink-0"; // Slightly larger for custom icons
 
         switch (ext) {
             case 'pdf':
-                return <FileType className={className} />;
+                return <PdfIcon className={className} />;
             case 'doc':
             case 'docx':
-                return <FileText className={className} />;
+                return <WordIcon className={className} />;
             case 'xls':
             case 'xlsx':
             case 'csv':
-                return <FileSpreadsheet className={className} />;
+                return <ExcelIcon className={className} />;
             case 'jpg':
             case 'jpeg':
             case 'png':
             case 'gif':
             case 'webp':
-                return <FileImage className={className} />;
+                return <FileImage className={`${className} text-primary`} />;
             case 'py':
             case 'js':
             case 'ts':
@@ -92,10 +93,11 @@ export function DocumentList() {
             case 'html':
             case 'css':
             case 'json':
+                return <FileCode className={`${className} text-primary`} />;
             case 'md':
-                return <FileCode className={className} />;
+                return <MarkdownIcon className={className} />;
             default:
-                return <File className={className} />;
+                return <File className={`${className} text-primary`} />;
         }
     };
 
