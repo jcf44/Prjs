@@ -66,7 +66,7 @@ app = create_app()
 def start():
     import uvicorn
     settings = get_settings()
-    uvicorn.run("backend.main:app", host=settings.HOST, port=settings.PORT, reload=True)
+    uvicorn.run("backend.main:app", host=settings.HOST, port=settings.PORT, reload=True, reload_dirs=["backend"])
 
 if __name__ == "__main__":
     start()
