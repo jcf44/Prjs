@@ -4,21 +4,29 @@ import React, { useEffect, useState } from 'react';
 import { documentsApi, Document } from '@/lib/api';
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { FileText, Trash2, Upload, FileCode, FileImage, FileSpreadsheet, FileType, File } from "lucide-react";
+import { FileText, Trash2, Upload, FileCode, FileImage, FileSpreadsheet, FileType, File, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
+
+import { useStore } from "@/lib/store";
 
 export function DocumentList() {
     const [documents, setDocuments] = useState<Document[]>([]);
     const [isUploading, setIsUploading] = useState(false);
+    const { currentProject } = useStore();
 
     useEffect(() => {
-        loadDocuments();
-    }, []);
+        if (currentProject) {
+            loadDocuments();
+        } else {
+            setDocuments([]);
+        }
+    }, [currentProject]);
 
     const loadDocuments = async () => {
+        if (!currentProject) return;
         try {
-            const response = await documentsApi.list();
+            const response = await documentsApi.list(currentProject.project_id);
             setDocuments(response.data);
         } catch (error) {
             console.error(error);
@@ -39,11 +47,11 @@ export function DocumentList() {
 
     const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
-        if (!file) return;
+        if (!file || !currentProject) return;
 
         setIsUploading(true);
         try {
-            await documentsApi.upload(file);
+            await documentsApi.upload(file, currentProject.project_id);
             toast.success("Document uploaded");
             loadDocuments();
         } catch (error) {
@@ -96,15 +104,26 @@ export function DocumentList() {
             <div className="p-4 border-b flex items-center justify-between">
                 <h3 className="font-semibold">Knowledge Base</h3>
                 <div className="relative">
-                    <Input
-                        type="file"
-                        className="absolute inset-0 opacity-0 cursor-pointer"
-                        onChange={handleUpload}
-                        disabled={isUploading}
-                    />
+                    {!isUploading && (
+                        <Input
+                            type="file"
+                            className="absolute inset-0 opacity-0 cursor-pointer"
+                            onChange={handleUpload}
+                            disabled={isUploading}
+                        />
+                    )}
                     <Button size="sm" variant="outline" disabled={isUploading}>
-                        <Upload className="h-4 w-4 mr-2" />
-                        {isUploading ? 'Uploading...' : 'Upload'}
+                        {isUploading ? (
+                            <>
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                Uploading...
+                            </>
+                        ) : (
+                            <>
+                                <Upload className="h-4 w-4 mr-2" />
+                                Upload
+                            </>
+                        )}
                     </Button>
                 </div>
             </div>

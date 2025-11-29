@@ -23,6 +23,7 @@ class Document(BaseModel):
     last_modified: Optional[datetime] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
     user_profile: str
+    project_id: str = "default" # Default for migration
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -44,6 +45,7 @@ class Message(BaseModel):
 class Conversation(BaseModel):
     conversation_id: str
     user_profile: str
+    project_id: str = "default" # Default for migration
     started_at: datetime = Field(default_factory=datetime.now)
     last_message_at: datetime = Field(default_factory=datetime.now)
     title: Optional[str] = None

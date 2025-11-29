@@ -32,6 +32,7 @@ class SimpleChatRequest(BaseModel):
     message: str
     conversation_id: Optional[str] = None
     user_profile: str = "default"
+    project_id: str = "default"
     model: str = "auto"
     stream: bool = False
 
@@ -83,6 +84,7 @@ async def simple_chat(
         if not conversation_id:
             conv = await memory.create_conversation(
                 user_profile=request.user_profile, 
+                project_id=request.project_id,
                 first_message=request.message
             )
             conversation_id = conv.conversation_id
@@ -128,7 +130,7 @@ async def simple_chat(
         if use_rag:
              # Ensure we use a capable model for RAG
              rag_model = model if model != "auto" else router_service.doc_brain_model
-             rag_response = await rag_service.query(request.message, model=rag_model)
+             rag_response = await rag_service.query(request.message, project_id=request.project_id, model=rag_model)
              assistant_content = rag_response["answer"]
              sources = [meta.get("filename", "unknown") for meta in rag_response.get("sources", [])]
              # Deduplicate sources
@@ -172,10 +174,11 @@ async def simple_chat(
 @router.get("/conversations")
 async def list_conversations(
     user_profile: str = "default",
+    project_id: str = "default",
     limit: int = 10,
     memory: MemoryService = Depends(get_memory_service)
 ):
-    conversations = await memory.get_recent_conversations(user_profile, limit)
+    conversations = await memory.get_recent_conversations(user_profile, project_id, limit)
     return {
         "conversations": [
             {

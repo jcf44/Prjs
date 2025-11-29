@@ -12,10 +12,23 @@ export function ChatInterface() {
         isLoading,
         selectedModel,
         useRag,
-        messages
+        messages,
+        currentProject,
+        setMessages
     } = useStore();
 
+    React.useEffect(() => {
+        // Clear messages when project changes
+        setMessages([]);
+        // Ideally we would fetch recent conversation here
+    }, [currentProject, setMessages]);
+
     const handleSend = async (text: string) => {
+        if (!currentProject) {
+            toast.error("Please select a project first");
+            return;
+        }
+
         // Add user message
         addMessage({ role: 'user', content: text });
         setIsLoading(true);
@@ -25,7 +38,7 @@ export function ChatInterface() {
             // If backend supports streaming, we should use fetch + ReadableStream here.
 
             // Temporary: Mock streaming or just wait for response
-            const response = await chatApi.sendMessage(text, selectedModel, useRag);
+            const response = await chatApi.sendMessage(text, selectedModel, useRag, currentProject.project_id);
 
             // Add assistant message
             addMessage({

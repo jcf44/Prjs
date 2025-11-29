@@ -16,25 +16,22 @@ class IngestionService:
         self.chunk_size = 1000
         self.chunk_overlap = 200
 
-    async def process_file(self, file_path: str, user_profile: str, metadata: Dict[str, Any] = None):
+    async def process_file(self, file_path: str, user_profile: str, project_id: str = "default", metadata: Dict[str, Any] = None):
         """Process a file and ingest it into the vector DB"""
-        logger.info("Processing file", file_path=file_path)
+        logger.info("Processing file", file_path=file_path, project_id=project_id)
         
         try:
             # Calculate hash to check for duplicates
             with open(file_path, "rb") as f:
                 file_hash = hashlib.sha256(f.read()).hexdigest()
             
-            # Check for existing document by hash (using metadata filter if possible, or we need a way to query by metadata)
-            # ChromaDB supports where filter.
-            # We need to implement find_by_hash in VectorDBService or just query here.
-            # Let's add find_by_hash to VectorDBService later or just assume we can query.
-            # For now, let's skip the check or implement a basic check if we can.
-            # Actually, let's implement the check by querying the collection.
-            
-            existing = self.vector_db.collection.get(where={"file_hash": file_hash}, limit=1)
+            # Check for existing document by hash within the same project
+            existing = self.vector_db.collection.get(
+                where={"$and": [{"file_hash": file_hash}, {"project_id": project_id}]}, 
+                limit=1
+            )
             if existing and existing['ids']:
-                logger.info("Document already indexed", hash=file_hash)
+                logger.info("Document already indexed in this project", hash=file_hash, project_id=project_id)
                 # Return the source_id from the existing document metadata
                 return existing['metadatas'][0]['source_id']
 
@@ -51,6 +48,7 @@ class IngestionService:
                 "source": file_path,
                 "filename": base_metadata.pop("original_filename", None) or os.path.basename(file_path),
                 "user_profile": user_profile,
+                "project_id": project_id,
                 "source_id": source_id,
                 "file_hash": file_hash
             })

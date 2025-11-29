@@ -13,6 +13,7 @@ logger = structlog.get_logger()
 async def ingest_document(
     file: UploadFile = File(...),
     user_profile: str = Form("default"),
+    project_id: str = Form("default"),
     ingestion_service: IngestionService = Depends(get_ingestion_service)
 ):
     try:
@@ -25,9 +26,10 @@ async def ingest_document(
             source_id = await ingestion_service.process_file(
                 file_path=tmp_path,
                 user_profile=user_profile,
+                project_id=project_id,
                 metadata={"original_filename": file.filename}
             )
-            return {"status": "success", "source_id": source_id, "filename": file.filename}
+            return {"status": "success", "source_id": source_id, "filename": file.filename, "project_id": project_id}
         finally:
             # Cleanup temp file
             if os.path.exists(tmp_path):
@@ -44,6 +46,7 @@ class RAGQueryRequest(BaseModel):
     query: str
     limit: int = 5
     model: Optional[str] = None
+    project_id: str = "default"
 
 @router.post("/query")
 async def rag_query(
@@ -51,7 +54,7 @@ async def rag_query(
     rag_service: RAGService = Depends(get_rag_service)
 ):
     try:
-        results = await rag_service.query(request.query, model=request.model)
+        results = await rag_service.query(request.query, project_id=request.project_id, model=request.model)
         return results
     except Exception as e:
         logger.error("RAG query failed", error=str(e))
@@ -62,10 +65,11 @@ from backend.services.vector_db import get_vector_db_service, VectorDBService
 @router.get("/")
 async def list_documents(
     limit: int = 20,
+    project_id: str = "default",
     vector_db: VectorDBService = Depends(get_vector_db_service)
 ):
     """List ingested documents"""
-    return await vector_db.list_documents(limit=limit)
+    return await vector_db.list_documents(project_id=project_id, limit=limit)
 
 @router.delete("/{source_id}")
 async def delete_document(

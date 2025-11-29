@@ -41,10 +41,13 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     
+    from backend.api import chat, vision, documents, voice, projects
+    
     app.include_router(chat.router)
     app.include_router(vision.router)
     app.include_router(documents.router)
     app.include_router(voice.router)
+    app.include_router(projects.router)
     
     @app.get("/health")
     async def health_check(llm: LLMService = Depends(get_llm_service)):

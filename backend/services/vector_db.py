@@ -55,16 +55,21 @@ class VectorDBService:
             logger.error("Failed to add documents to ChromaDB", error=str(e))
             raise
 
-    async def search(self, query: str, n_results: int = 5) -> Dict[str, Any]:
-        """Search for relevant documents"""
-        logger.info("Searching vector DB", query=query)
+    async def search(self, query: str, project_id: str = "default", n_results: int = 5) -> Dict[str, Any]:
+        """Search for relevant documents within a project"""
+        logger.info("Searching vector DB", query=query, project_id=project_id)
         
         try:
             query_embeddings = await self._get_embeddings([query])
             query_embedding = query_embeddings[0]
+            
+            # Filter by project_id
+            where_filter = {"project_id": project_id}
+            
             results = self.collection.query(
                 query_embeddings=[query_embedding],
-                n_results=n_results
+                n_results=n_results,
+                where=where_filter
             )
             return results
         except Exception as e:
@@ -83,16 +88,20 @@ class VectorDBService:
             logger.error("Failed to delete document", error=str(e))
             raise
 
-    async def list_documents(self, limit: int = 100) -> List[Dict[str, Any]]:
-        """List unique documents in the vector DB"""
+    async def list_documents(self, project_id: str = "default", limit: int = 100) -> List[Dict[str, Any]]:
+        """List unique documents in the vector DB for a specific project"""
         try:
             # ChromaDB doesn't have a direct "SELECT DISTINCT" for metadata.
             # We have to fetch all (or limit) and aggregate.
             # This is not efficient for large datasets but works for small/medium.
             # Ideally, we would maintain a separate "documents" collection or SQL table.
             
-            # Fetch metadatas only
-            result = self.collection.get(include=["metadatas"])
+            # Fetch metadatas only, filtered by project_id
+            # Note: ChromaDB get() supports where filter
+            result = self.collection.get(
+                include=["metadatas"],
+                where={"project_id": project_id}
+            )
             metadatas = result["metadatas"]
             
             unique_docs = {}
@@ -104,6 +113,7 @@ class VectorDBService:
                         "filename": meta.get("filename", "unknown"),
                         "source": meta.get("source", "unknown"),
                         "user_profile": meta.get("user_profile", "default"),
+                        "project_id": meta.get("project_id", "default"),
                         "created_at": meta.get("created_at", None) # If we added this
                     }
             

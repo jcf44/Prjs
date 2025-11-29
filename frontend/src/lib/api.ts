@@ -23,11 +23,20 @@ export interface Document {
   created_at?: string;
 }
 
+export interface Project {
+  project_id: string;
+  name: string;
+  description?: string;
+  user_profile: string;
+  created_at: string;
+}
+
 export interface ChatRequest {
   message: string;
   model?: string;
   user_id?: string;
   conversation_id?: string;
+  project_id?: string;
 }
 
 export interface ChatResponse {
@@ -38,22 +47,24 @@ export interface ChatResponse {
 }
 
 export const chatApi = {
-  sendMessage: async (message: string, model: string = 'auto', useRag: boolean = false): Promise<ChatResponse> => {
+  sendMessage: async (message: string, model: string = 'auto', useRag: boolean = false, projectId: string = 'default'): Promise<ChatResponse> => {
     const response = await api.post<ChatResponse>('/chat', {
       message,
       model: useRag ? 'rag' : model,
+      project_id: projectId,
     });
     return response.data;
   },
 
   // Streaming version using fetch (for future implementation)
-  sendMessageStream: async function* (message: string, model: string = 'auto', useRag: boolean = false) {
+  sendMessageStream: async function* (message: string, model: string = 'auto', useRag: boolean = false, projectId: string = 'default') {
     const response = await fetch(`${API_BASE_URL}/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         message,
         model: useRag ? 'rag' : model,
+        project_id: projectId,
         stream: true,
       }),
     });
@@ -101,15 +112,30 @@ export const voiceApi = {
 };
 
 export const documentsApi = {
-  list: () => api.get<Document[]>('/documents/'),
-  upload: async (file: File) => {
+  list: (projectId: string = 'default') => api.get<Document[]>('/documents/', { params: { project_id: projectId } }),
+  upload: async (file: File, projectId: string = 'default') => {
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('project_id', projectId);
     return api.post('/documents/ingest', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
   },
   delete: (sourceId: string) => api.delete(`/documents/${sourceId}`),
-  query: (query: string, nResults: number = 5) =>
-    api.post('/documents/query', { query, n_results: nResults }),
+  query: (query: string, nResults: number = 5, projectId: string = 'default') =>
+    api.post('/documents/query', { query, n_results: nResults, project_id: projectId }),
+};
+
+export const projectsApi = {
+  list: () => api.get<Project[]>('/projects/'),
+  create: (name: string, description?: string) => {
+    const formData = new FormData();
+    formData.append('name', name);
+    if (description) formData.append('description', description);
+    return api.post<Project>('/projects/', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+  get: (projectId: string) => api.get<Project>(`/projects/${projectId}`),
+  delete: (projectId: string) => api.delete(`/projects/${projectId}`),
 };

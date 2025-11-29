@@ -16,7 +16,7 @@ class MemoryService:
         db = await get_database()
         return db[self.collection_name]
 
-    async def create_conversation(self, user_profile: str, title: Optional[str] = None, first_message: Optional[str] = None) -> Conversation:
+    async def create_conversation(self, user_profile: str, project_id: str = "default", title: Optional[str] = None, first_message: Optional[str] = None) -> Conversation:
         collection = await self.get_collection()
         conversation_id = str(uuid.uuid4())
         
@@ -26,6 +26,7 @@ class MemoryService:
         conversation = Conversation(
             conversation_id=conversation_id,
             user_profile=user_profile,
+            project_id=project_id,
             title=title,
             started_at=datetime.now(),
             last_message_at=datetime.now(),
@@ -33,7 +34,7 @@ class MemoryService:
         )
         
         await collection.insert_one(conversation.model_dump(mode="json"))
-        logger.info("Created new conversation", conversation_id=conversation_id, user_profile=user_profile, title=title)
+        logger.info("Created new conversation", conversation_id=conversation_id, user_profile=user_profile, project_id=project_id, title=title)
         return conversation
 
     async def add_message(self, conversation_id: str, message: Message):
@@ -61,9 +62,9 @@ class MemoryService:
             return Conversation(**doc)
         return None
 
-    async def get_recent_conversations(self, user_profile: str, limit: int = 10) -> List[Conversation]:
+    async def get_recent_conversations(self, user_profile: str, project_id: str = "default", limit: int = 10) -> List[Conversation]:
         collection = await self.get_collection()
-        cursor = collection.find({"user_profile": user_profile}).sort("last_message_at", -1).limit(limit)
+        cursor = collection.find({"user_profile": user_profile, "project_id": project_id}).sort("last_message_at", -1).limit(limit)
         
         conversations = []
         async for doc in cursor:

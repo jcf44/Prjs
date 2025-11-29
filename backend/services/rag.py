@@ -12,14 +12,14 @@ class RAGService:
         self.llm = get_llm_service()
         self.settings = get_settings()
 
-    async def query(self, query: str, model: str = None) -> Dict[str, Any]:
+    async def query(self, query: str, project_id: str = "default", model: str = None) -> Dict[str, Any]:
         """
         Answer a query using RAG.
         """
-        logger.info("Processing RAG query", query=query)
+        logger.info("Processing RAG query", query=query, project_id=project_id)
         
         # 1. Retrieve relevant documents
-        results = await self.vector_db.search(query, n_results=3)
+        results = await self.vector_db.search(query, project_id=project_id, n_results=3)
         documents = results['documents'][0]
         metadatas = results['metadatas'][0]
         
