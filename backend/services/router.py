@@ -16,6 +16,11 @@ class RouterService:
             r"code review", r"refactor", r"debug", r"optimize"
         ]
         
+        # Explicit "Think Deeper" triggers
+        self.deep_think_keywords = [
+            r"think deeper", r"think hard", r"use your big brain", r"deep think"
+        ]
+        
         self.doc_brain_model = settings.DOC_BRAIN_MODEL
         self.fast_brain_model = settings.FAST_BRAIN_MODEL
 
@@ -23,7 +28,13 @@ class RouterService:
         """
         Determine which model to use based on the query.
         """
-        # Check for complex keywords
+        # 1. Check for explicit "Think Deeper" triggers
+        for pattern in self.deep_think_keywords:
+            if re.search(pattern, query, re.IGNORECASE):
+                logger.info("Routing to Doc Brain", reason="deep_think_trigger", keyword=pattern)
+                return self.doc_brain_model
+
+        # 2. Check for complex keywords
         for pattern in self.complex_keywords:
             if re.search(pattern, query, re.IGNORECASE):
                 logger.info("Routing to Doc Brain", reason="complex_keyword", keyword=pattern)

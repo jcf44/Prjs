@@ -89,9 +89,11 @@ export const chatApi = {
 export const voiceApi = {
   start: () => api.post('/voice/start'),
   stop: () => api.post('/voice/stop'),
+  listen: () => api.post('/voice/listen'), // Manual trigger for push-to-talk
   status: () => api.get<{
     is_running: boolean;
     listening_for_command: boolean;
+    is_speaking: boolean;
     buffer_size: number;
     keywords_file: string;
   }>('/voice/status'),
@@ -108,6 +110,6 @@ export const documentsApi = {
     });
   },
   delete: (sourceId: string) => api.delete(`/documents/${sourceId}`),
-  query: (query: string, nResults: number = 5) => 
+  query: (query: string, nResults: number = 5) =>
     api.post('/documents/query', { query, n_results: nResults }),
 };

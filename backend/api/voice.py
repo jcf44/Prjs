@@ -16,6 +16,7 @@ _voice_task: Optional[asyncio.Task] = None
 class VoiceStatusResponse(BaseModel):
     is_running: bool
     listening_for_command: bool
+    is_speaking: bool
     buffer_size: int
     keywords_file: Optional[str] = None
 
@@ -80,6 +81,32 @@ async def stop_voice():
         
     except Exception as e:
         logger.error("Failed to stop voice pipeline", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/listen")
+async def manual_listen():
+    """Manually trigger listening mode (push-to-talk)"""
+    try:
+        orchestrator = get_orchestrator()
+        
+        if not orchestrator.is_running:
+            raise HTTPException(status_code=400, detail="Voice mode not active. Start voice mode first.")
+        
+        if orchestrator.listening_for_command:
+            return {"status": "already_listening", "message": "Already in listening mode"}
+        
+        if orchestrator.is_speaking or orchestrator.is_processing:
+            return {"status": "busy", "message": "System is currently speaking or processing"}
+        
+        # Directly enter listening mode
+        orchestrator._enter_listening_mode()
+        
+        logger.info("Manual listening triggered (push-to-talk)")
+        return {"status": "listening", "message": "Listening for command..."}
+        
+    except Exception as e:
+        logger.error("Failed to start manual listening", error=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 

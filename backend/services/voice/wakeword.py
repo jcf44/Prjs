@@ -26,18 +26,20 @@ class WakeWordService:
         tokens = os.path.join(model_path, "tokens.txt")
         
         # Keywords file - prefer custom "Hey Wendy" if it exists
+        custom_keywords_sensitive = os.path.join(model_path, "keywords_wendy_sensitive.txt")
         custom_keywords = os.path.join(model_path, "keywords_wendy.txt")
         default_keywords = os.path.join(model_path, "keywords.txt")
         
-        if os.path.exists(custom_keywords):
+        # Keywords file - prefer custom "Hey Wendy" if it exists
+        custom_keywords_sensitive = os.path.join(model_path, "keywords_wendy_sensitive.txt")
+        if os.path.exists(custom_keywords_sensitive):
+            self.keywords_file = custom_keywords_sensitive
+            logger.info("Using sensitive 'Hey Wendy' keywords")
+        elif os.path.exists(custom_keywords):
             self.keywords_file = custom_keywords
             logger.info("Using custom 'Hey Wendy' keywords")
         else:
             self.keywords_file = default_keywords
-            logger.warning(
-                "Custom keywords not found, using default. "
-                "Run 'python scripts/create_wakeword.py' to create 'Hey Wendy' keywords."
-            )
         
         try:
             self.spotter = sherpa_onnx.KeywordSpotter(
@@ -47,13 +49,14 @@ class WakeWordService:
                 joiner=joiner,
                 num_threads=1,
                 keywords_file=self.keywords_file,
-                keywords_score=0.5,
-                keywords_threshold=0.25,
+                keywords_score=0.15,      # Lowered from 0.3 for higher sensitivity
+                keywords_threshold=0.10,  # Lowered from 0.25 for higher sensitivity
                 num_trailing_blanks=1,
                 provider="cpu"
             )
             self.stream = self.spotter.create_stream()
-            logger.info("Sherpa-ONNX KWS initialized", keywords_file=self.keywords_file)
+            logger.info("Sherpa-ONNX KWS initialized", keywords_file=self.keywords_file, 
+                       score_threshold=0.15, keywords_threshold=0.10)
         except Exception as e:
             logger.error("Failed to initialize KWS", error=str(e))
             raise
@@ -82,18 +85,27 @@ class WakeWordService:
         if audio_chunk.dtype == np.int16:
             audio_chunk = audio_chunk.astype(np.float32) / 32768.0
         
-        # Flatten if needed (sounddevice returns shape (N, 1) for mono)
+        # Flatten if needed
         if audio_chunk.ndim > 1:
             audio_chunk = audio_chunk.flatten()
-        
+            
         self.stream.accept_waveform(16000, audio_chunk)
         
+        # DEBUG: Check if ready
         while self.spotter.is_ready(self.stream):
-            self.spotter.decode_stream(self.stream)  # Fixed: decode_stream instead of decode
+            self.spotter.decode_stream(self.stream)
         
         result = self.spotter.get_result(self.stream)
         if result:
-            keyword = getattr(result, 'keyword', None) or getattr(result, 'keywords', None)
+            # DEBUG: Inspect result
+            logger.info("KWS Result Raw", result=str(result), type=str(type(result)))
+            
+            # Handle different result types (string or object)
+            if isinstance(result, str):
+                keyword = result
+            else:
+                keyword = getattr(result, 'keyword', None) or getattr(result, 'keywords', None)
+            
             if keyword:
                 logger.info("Wake word detected!", keyword=keyword)
                 return True

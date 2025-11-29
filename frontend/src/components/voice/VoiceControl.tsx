@@ -32,9 +32,11 @@ export function VoiceControl() {
     const checkStatus = useCallback(async () => {
         try {
             const response = await voiceApi.status();
-            const { listening_for_command, is_running } = response.data;
+            const { listening_for_command, is_running, is_speaking } = response.data;
             if (!is_running) {
                 setVoiceStatus('idle');
+            } else if (is_speaking) {
+                setVoiceStatus('speaking');
             } else if (listening_for_command) {
                 setVoiceStatus('listening');
             } else {
@@ -49,7 +51,7 @@ export function VoiceControl() {
     useEffect(() => {
         if (isVoiceActive) {
             startVoice();
-            intervalRef.current = setInterval(checkStatus, 1000);
+            intervalRef.current = setInterval(checkStatus, 500);
         } else {
             stopVoice();
             if (intervalRef.current) {
@@ -63,6 +65,17 @@ export function VoiceControl() {
             if (intervalRef.current) clearInterval(intervalRef.current);
         };
     }, [isVoiceActive, startVoice, stopVoice, checkStatus, setVoiceStatus]);
+
+
+    const handleTalkClick = useCallback(async () => {
+        try {
+            await voiceApi.listen();
+            toast.success("Listening for your command...");
+        } catch (error) {
+            console.error(error);
+            toast.error("Failed to start listening");
+        }
+    }, []);
 
     return (
         <div className="flex flex-col items-center gap-4 p-6 bg-card rounded-lg border shadow-sm">
@@ -87,9 +100,10 @@ export function VoiceControl() {
                         <>
                             <Activity className="h-4 w-4 animate-bounce" />
                             <span>
-                                {voiceStatus === 'listening' ? 'Listening...' :
-                                    voiceStatus === 'waiting' ? 'Say "Hey Wendy"' :
-                                        'Processing...'}
+                                {voiceStatus === 'speaking' ? 'Speaking...' :
+                                    voiceStatus === 'listening' ? 'Listening...' :
+                                        voiceStatus === 'waiting' ? 'Ready' :
+                                            'Processing...'}
                             </span>
                         </>
                     ) : (
@@ -97,6 +111,14 @@ export function VoiceControl() {
                     )}
                 </div>
             </div>
+
+            {/* Push-to-Talk Button */}
+            {isVoiceActive && voiceStatus !== 'listening' && voiceStatus !== 'speaking' && (
+                <Button size="lg" variant="default" onClick={handleTalkClick} className="w-full mt-2">
+                    <Mic className="mr-2 h-5 w-5" />
+                    Click to Talk
+                </Button>
+            )}
         </div>
     );
 }

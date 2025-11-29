@@ -1,4 +1,4 @@
-from ollama import AsyncClient
+from ollama import AsyncClient, Client
 from backend.config import get_settings
 import structlog
 
@@ -8,6 +8,7 @@ class LLMService:
     def __init__(self):
         self.settings = get_settings()
         self.client = AsyncClient(host=self.settings.OLLAMA_BASE_URL)
+        self.sync_client = Client(host=self.settings.OLLAMA_BASE_URL)
 
     async def chat(self, model: str, messages: list, stream: bool = False):
         logger.info("Sending chat request to Ollama", model=model, stream=stream)
@@ -16,6 +17,16 @@ class LLMService:
             return response
         except Exception as e:
             logger.error("Error communicating with Ollama", error=str(e))
+            raise
+
+    def chat_sync(self, model: str, messages: list, stream: bool = False):
+        """Synchronous chat for use in worker threads"""
+        logger.info("Sending sync chat request to Ollama", model=model, stream=stream)
+        try:
+            response = self.sync_client.chat(model=model, messages=messages, stream=stream)
+            return response
+        except Exception as e:
+            logger.error("Error communicating with Ollama (Sync)", error=str(e))
             raise
 
     async def list_models(self) -> list[str]:

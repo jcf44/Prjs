@@ -23,17 +23,38 @@ class STTService:
         """
         Transcribe audio data (numpy array float32 or int16).
         """
-        # Ensure float32
-        if audio_data.dtype == np.int16:
-            audio_data = audio_data.astype(np.float32) / 32768.0
+        try:
+            # Ensure float32
+            if audio_data.dtype == np.int16:
+                audio_data = audio_data.astype(np.float32) / 32768.0
             
-        segments, info = self.model.transcribe(audio_data, beam_size=5)
-        
-        text = ""
-        for segment in segments:
-            text += segment.text
+            # Ensure 1D array
+            if audio_data.ndim > 1:
+                audio_data = audio_data.flatten()
             
-        return text.strip()
+            logger.info("Starting Whisper transcription", samples=len(audio_data))
+            
+            # Explicitly set language and VAD to help
+            segments, info = self.model.transcribe(
+                audio_data, 
+                beam_size=5, 
+                language="en",
+                vad_filter=True,
+                vad_parameters=dict(min_silence_duration_ms=500)
+            )
+            
+            text = ""
+            count = 0
+            for segment in segments:
+                count += 1
+                logger.debug("Segment found", text=segment.text)
+                text += segment.text
+                
+            logger.info("Transcription finished", segments_count=count, text_len=len(text))
+            return text.strip()
+        except Exception as e:
+            logger.error("Transcription failed", error=str(e))
+            return ""
 
 _stt_service: STTService | None = None
 
