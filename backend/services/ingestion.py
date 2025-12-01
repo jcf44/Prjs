@@ -13,8 +13,8 @@ logger = structlog.get_logger()
 class IngestionService:
     def __init__(self):
         self.vector_db = get_vector_db_service()
-        self.chunk_size = 1000
-        self.chunk_overlap = 200
+        self.chunk_size = 800
+        self.chunk_overlap = 300
 
     async def process_file(self, file_path: str, user_profile: str, project_id: str = "default", metadata: Dict[str, Any] = None):
         """Process a file and ingest it into the vector DB"""
@@ -35,7 +35,7 @@ class IngestionService:
                 # Return the source_id from the existing document metadata
                 return existing['metadatas'][0]['source_id']
 
-            text = self._extract_text(file_path)
+            text = self.extract_text(file_path)
             chunks = self._chunk_text(text)
             
             # Prepare data for vector DB
@@ -66,7 +66,7 @@ class IngestionService:
             logger.error("Ingestion failed", error=str(e), file_path=file_path)
             raise
 
-    def _extract_text(self, file_path: str) -> str:
+    def extract_text(self, file_path: str) -> str:
         ext = os.path.splitext(file_path)[1].lower()
         
         if ext == ".txt" or ext == ".md":

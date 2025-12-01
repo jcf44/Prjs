@@ -47,11 +47,12 @@ export interface ChatResponse {
 }
 
 export const chatApi = {
-  sendMessage: async (message: string, model: string = 'auto', useRag: boolean = false, projectId: string = 'default'): Promise<ChatResponse> => {
+  sendMessage: async (message: string, model: string = 'auto', useRag: boolean = false, projectId: string = 'default', focusDocumentId: string | null = null): Promise<ChatResponse> => {
     const response = await api.post<ChatResponse>('/chat', {
       message,
       model: useRag ? 'rag' : model,
       project_id: projectId,
+      focus_document_id: focusDocumentId,
     });
     return response.data;
   },
@@ -124,6 +125,22 @@ export const documentsApi = {
   delete: (sourceId: string) => api.delete(`/documents/${sourceId}`),
   query: (query: string, nResults: number = 5, projectId: string = 'default') =>
     api.post('/documents/query', { query, n_results: nResults, project_id: projectId }),
+  convert: (sourceId: string, projectId: string = 'default') =>
+    api.post(`/documents/${sourceId}/convert`, null, { params: { project_id: projectId } }),
+  download: async (sourceId: string, filename: string) => {
+    const response = await api.get(`/documents/${sourceId}/download`, {
+      responseType: 'blob',
+    });
+    // Create blob link to download
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  },
 };
 
 export const projectsApi = {

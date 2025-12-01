@@ -122,6 +122,22 @@ class VectorDBService:
             logger.error("Failed to list documents", error=str(e))
             return []
 
+    async def get_document_path(self, source_id: str) -> Optional[str]:
+        """Retrieve the file path for a given source_id"""
+        try:
+            # Fetch one chunk to get the metadata
+            result = self.collection.get(
+                where={"source_id": source_id},
+                limit=1,
+                include=["metadatas"]
+            )
+            if result and result["metadatas"] and len(result["metadatas"]) > 0:
+                return result["metadatas"][0].get("source")
+            return None
+        except Exception as e:
+            logger.error("Failed to get document path", error=str(e))
+            return None
+
 _vector_db_service: VectorDBService | None = None
 
 def get_vector_db_service():

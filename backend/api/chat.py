@@ -5,10 +5,13 @@ from backend.services.llm import get_llm_service, LLMService
 from backend.services.memory import get_memory_service, MemoryService
 from backend.services.router import get_router_service, RouterService
 from backend.services.rag import get_rag_service, RAGService
+from backend.services.ingestion import get_ingestion_service, IngestionService
+from backend.services.vector_db import get_vector_db_service, VectorDBService
 from backend.domain.models import Message, MessageRole
 import structlog
 import uuid
 import re
+import os
 
 router = APIRouter(prefix="/v1", tags=["chat"])
 logger = structlog.get_logger()
@@ -33,6 +36,7 @@ class SimpleChatRequest(BaseModel):
     conversation_id: Optional[str] = None
     user_profile: str = "default"
     project_id: str = "default"
+    focus_document_id: Optional[str] = None
     model: str = "auto"
     stream: bool = False
 
@@ -127,9 +131,69 @@ async def simple_chat(
         sources = []
         
         # 6. Call LLM (with or without RAG)
-        if use_rag:
+        # 6. Call LLM (with or without RAG/Focus)
+        if request.focus_document_id:
+            logger.info("Using Focus Mode", document_id=request.focus_document_id)
+            # Retrieve file path
+            vector_db = get_vector_db_service()
+            file_path = await vector_db.get_document_path(request.focus_document_id)
+            
+            if file_path:
+                # Read full text
+                ingestion = get_ingestion_service()
+                full_text = ingestion.extract_text(file_path)
+                
+                # Truncate if too long (approx 100k chars ~ 25k tokens, safe for 32k context)
+                max_chars = 100000
+                if len(full_text) > max_chars:
+                    logger.warning("Document too large for context, truncating", original_len=len(full_text), new_len=max_chars)
+                    full_text = full_text[:max_chars] + "\n...[TRUNCATED]..."
+                
+                logger.info("Focus Mode: Read document", path=file_path, length=len(full_text))
+                
+                file_ext = os.path.splitext(file_path)[1].lower()
+                
+                # Construct prompt with full context
+                # We inject the document into the USER message to ensure the model attends to it.
+                system_prompt = "You are a helpful assistant. Answer the user's question based ONLY on the provided document content."
+                
+                # Create a new history with the system prompt
+                history = [{"role": "system", "content": system_prompt}]
+                
+                # Add previous messages (excluding the last one which is the current query)
+                # We'll construct a special last message
+                for msg in conversation.messages:
+                    history.append({"role": msg.role.value, "content": msg.content})
+                
+                # The current request.message is already in conversation.messages (added in step 2)
+                # But we want to modify the LAST user message to include the document context.
+                # Let's pop the last message (which is the current query) and reconstruct it.
+                last_msg = history.pop()
+                
+                context_enhanced_content = f"""Here is the document content you must analyze:
+
+--- BEGIN DOCUMENT ({file_ext}) ---
+{full_text}
+--- END DOCUMENT ---
+
+User Question: {last_msg['content']}
+"""
+                history.append({"role": "user", "content": context_enhanced_content})
+
+                logger.info("Focus Mode Prompt Constructed", prompt_len=len(context_enhanced_content), preview=context_enhanced_content[:200])
+                
+                # Use a capable model for large context
+                focus_model = router_service.doc_brain_model
+                response = await llm.chat(model=focus_model, messages=history, stream=False)
+                assistant_content = response['message']['content']
+                sources = [file_path] # Cite the focused document
+                model = focus_model
+            else:
+                assistant_content = "I could not find the document you asked me to focus on."
+                
+        elif use_rag:
              # Ensure we use a capable model for RAG
-             rag_model = model if model != "auto" else router_service.doc_brain_model
+             rag_model = router_service.doc_brain_model if model == "rag" or model == "auto" else model
              rag_response = await rag_service.query(request.message, project_id=request.project_id, model=rag_model)
              assistant_content = rag_response["answer"]
              sources = [meta.get("filename", "unknown") for meta in rag_response.get("sources", [])]

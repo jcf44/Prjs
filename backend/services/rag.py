@@ -19,7 +19,7 @@ class RAGService:
         logger.info("Processing RAG query", query=query, project_id=project_id)
         
         # 1. Retrieve relevant documents
-        results = await self.vector_db.search(query, project_id=project_id, n_results=3)
+        results = await self.vector_db.search(query, project_id=project_id, n_results=15)
         documents = results['documents'][0]
         metadatas = results['metadatas'][0]
         

@@ -4,6 +4,7 @@ import { ChatInput } from './ChatInput';
 import { useStore } from '@/lib/store';
 import { chatApi } from '@/lib/api';
 import { toast } from "sonner";
+import { X } from "lucide-react";
 
 export function ChatInterface() {
     const {
@@ -14,8 +15,15 @@ export function ChatInterface() {
         useRag,
         messages,
         currentProject,
-        setMessages
+        setMessages,
+        focusedDocumentId,
+        setFocusedDocumentId,
+        documents
     } = useStore();
+
+    const focusedDocumentName = React.useMemo(() => {
+        return documents.find(d => d.source_id === focusedDocumentId)?.filename || "Unknown Document";
+    }, [documents, focusedDocumentId]);
 
     React.useEffect(() => {
         // Clear messages when project changes
@@ -38,7 +46,7 @@ export function ChatInterface() {
             // If backend supports streaming, we should use fetch + ReadableStream here.
 
             // Temporary: Mock streaming or just wait for response
-            const response = await chatApi.sendMessage(text, selectedModel, useRag, currentProject.project_id);
+            const response = await chatApi.sendMessage(text, selectedModel, useRag, currentProject.project_id, focusedDocumentId);
 
             // Add assistant message
             addMessage({
@@ -64,6 +72,22 @@ export function ChatInterface() {
                     Model: {selectedModel} | RAG: {useRag ? 'On' : 'Off'}
                 </div>
             </div>
+
+            {focusedDocumentId && (
+                <div className="bg-primary/10 border-b border-primary/20 p-2 px-4 flex items-center justify-between text-sm text-primary animate-in slide-in-from-top-2 fade-in duration-200">
+                    <span className="font-medium flex items-center gap-2">
+                        <span className="text-lg">👁️</span>
+                        Focusing on: <span className="font-bold">{focusedDocumentName}</span> (Full Context)
+                    </span>
+                    <button
+                        onClick={() => setFocusedDocumentId(null)}
+                        className="hover:bg-primary/20 p-1 rounded-full transition-colors"
+                        title="Clear Focus"
+                    >
+                        <X className="h-4 w-4" />
+                    </button>
+                </div>
+            )}
 
             <MessageList />
 

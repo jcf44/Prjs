@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { ChatMessage, Project, projectsApi } from './api';
+import { ChatMessage, Project, projectsApi, Document } from './api';
 
 interface AppState {
     // Chat
@@ -21,6 +21,10 @@ interface AppState {
     voiceStatus: string;
     setVoiceStatus: (status: string) => void;
 
+    // Documents
+    documents: Document[];
+    setDocuments: (documents: Document[]) => void;
+
     // Projects
     projects: Project[];
     currentProject: Project | null;
@@ -28,6 +32,9 @@ interface AppState {
     setCurrentProject: (project: Project) => void;
     createProject: (name: string, description?: string) => Promise<void>;
     deleteProject: (projectId: string) => Promise<void>;
+    // Focus Mode
+    focusedDocumentId: string | null;
+    setFocusedDocumentId: (id: string | null) => void;
 }
 
 export const useStore = create<AppState>((set, get) => ({
@@ -49,6 +56,10 @@ export const useStore = create<AppState>((set, get) => ({
     setIsVoiceActive: (active) => set({ isVoiceActive: active }),
     voiceStatus: 'idle',
     setVoiceStatus: (status) => set({ voiceStatus: status }),
+
+    // Documents
+    documents: [],
+    setDocuments: (docs) => set({ documents: docs }),
 
     // Projects
     projects: [],
@@ -91,4 +102,7 @@ export const useStore = create<AppState>((set, get) => ({
             throw error;
         }
     },
+    // Focus Mode
+    focusedDocumentId: null,
+    setFocusedDocumentId: (id) => set({ focusedDocumentId: id }),
 }));
