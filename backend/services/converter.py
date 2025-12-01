@@ -271,10 +271,10 @@ class DocumentConverter:
             chars = page_data["chars"]
             height = page_data["height"]
             
-            # Header zone: top 15% of page
-            header_zone_limit = height * 0.15
-            # Footer zone: bottom 15% of page  
-            footer_zone_start = height * 0.85
+            # Header zone: top 20% of page (widened from 15%)
+            header_zone_limit = height * 0.20
+            # Footer zone: bottom 20% of page (widened from 15%)
+            footer_zone_start = height * 0.80
             
             # Group characters into lines for this page
             header_lines = []
@@ -309,8 +309,9 @@ class DocumentConverter:
             top_texts.append(header_lines)
             bottom_texts.append(footer_lines)
         
-        # Find text that appears in most pages (>= 50% of pages)
-        repeated_threshold = len(all_pages_text) // 2
+        # Find text that appears in most pages (>= 30% of pages)
+        # Lower threshold catches headers/footers that might not appear on all pages
+        repeated_threshold = max(2, int(len(all_pages_text) * 0.3))  # At least 2 pages, or 30%
         headers_footers = set()
         
         # Count occurrences of each text in headers
@@ -329,6 +330,37 @@ class DocumentConverter:
         for text, count in footer_counts.items():
             if count >= repeated_threshold and len(text) > 3:
                 headers_footers.add(text)
+        
+        # Also detect patterns with numbers (e.g., "Execution Copy (PRC004692) 7" -> "Execution Copy (PRC004692)")
+        # Normalize by removing trailing numbers and check for patterns
+        def normalize_text(text):
+            """Remove trailing standalone numbers and 'Page X' patterns."""
+            # Remove patterns like " 7", " Page 7", "- 7", etc.
+            normalized = re.sub(r'\s+\d+\s*$', '', text)  # Trailing numbers
+            normalized = re.sub(r'\s+page\s+\d+\s*$', '', normalized, flags=re.IGNORECASE)
+            normalized = re.sub(r'\s+-\s+\d+\s*$', '', normalized)
+            return normalized.strip()
+        
+        # Collect normalized versions of all header/footer texts
+        normalized_header_texts = [normalize_text(text) for text in all_header_texts]
+        normalized_footer_texts = [normalize_text(text) for text in all_footer_texts]
+        
+        normalized_header_counts = Counter(normalized_header_texts)
+        normalized_footer_counts = Counter(normalized_footer_texts)
+        
+        # Add normalized patterns that appear frequently
+        for normalized, count in normalized_header_counts.items():
+            if count >= repeated_threshold and len(normalized) > 3:
+                # Add all original texts that match this pattern
+                for original in all_header_texts:
+                    if normalize_text(original) == normalized:
+                        headers_footers.add(original)
+        
+        for normalized, count in normalized_footer_counts.items():
+            if count >= repeated_threshold and len(normalized) > 3:
+                for original in all_footer_texts:
+                    if normalize_text(original) == normalized:
+                        headers_footers.add(original)
         
         logger.info(f"Detected {len(headers_footers)} header/footer texts to exclude")
         return headers_footers
@@ -550,8 +582,18 @@ class DocumentConverter:
                         i += 1
                         continue
                     
-                    # Skip if this line is a header/footer
+                    # Skip if this line is a header/footer (check exact match or if it contains header/footer)
+                    is_header_footer = False
                     if next_text in header_footer_text:
+                        is_header_footer = True
+                    else:
+                        # Also check if any header/footer appears as a substring
+                        for hf_text in header_footer_text:
+                            if hf_text in next_text or next_text in hf_text:
+                                is_header_footer = True
+                                break
+                    
+                    if is_header_footer:
                         i += 1
                         continue
                     
@@ -600,8 +642,18 @@ class DocumentConverter:
                         i += 1
                         continue
                     
-                    # Skip if this line is a header/footer
+                    # Skip if this line is a header/footer (check exact match or substring)
+                    is_header_footer = False
                     if next_text in header_footer_text:
+                        is_header_footer = True
+                    else:
+                        # Also check if any header/footer appears as a substring
+                        for hf_text in header_footer_text:
+                            if hf_text in next_text or next_text in hf_text:
+                                is_header_footer = True
+                                break
+                    
+                    if is_header_footer:
                         i += 1
                         continue
                     
