@@ -380,7 +380,7 @@ class DocumentConverter:
                     filtered_lines.append(line)
             lines = filtered_lines
         
-        blocks = self._group_lines_into_blocks(lines, avg_font_size)
+        blocks = self._group_lines_into_blocks(lines, avg_font_size, header_footer_text)
 
         return blocks
 
@@ -490,7 +490,7 @@ class DocumentConverter:
         }
 
     def _group_lines_into_blocks(
-        self, lines: List[Dict], avg_font_size: float
+        self, lines: List[Dict], avg_font_size: float, header_footer_text: set = None
     ) -> List[Dict]:
         """
         Group lines into text blocks and detect formatting.
@@ -499,6 +499,9 @@ class DocumentConverter:
         """
         if not lines:
             return []
+        
+        if header_footer_text is None:
+            header_footer_text = set()
         
         # Step 1: Merge separated section numbers with their following text
         merged_lines = self._merge_section_numbers(lines)
@@ -547,6 +550,11 @@ class DocumentConverter:
                         i += 1
                         continue
                     
+                    # Skip if this line is a header/footer
+                    if next_text in header_footer_text:
+                        i += 1
+                        continue
+                    
                     next_is_header, _ = self._detect_header(next_line, avg_font_size, len(next_text))
                     next_is_list, _, _ = self._detect_list_type(next_text)
                     
@@ -589,6 +597,11 @@ class DocumentConverter:
                     next_line = merged_lines[i]
                     next_text = next_line["text"].strip()
                     if not next_text:
+                        i += 1
+                        continue
+                    
+                    # Skip if this line is a header/footer
+                    if next_text in header_footer_text:
                         i += 1
                         continue
                     
@@ -737,32 +750,34 @@ class DocumentConverter:
         Returns:
             (is_list, list_marker, indent_level)
             - is_list: whether this is a list item
-            - list_marker: the markdown marker to use (e.g., '-', '1.', '  -')
+            - list_marker: the markdown marker to use (preserves original for roman/letters)
             - indent_level: 0 for top-level, 1 for nested, 2 for double-nested, etc.
         """
         text = text.strip()
         if len(text) < 2:
             return False, "", 0
 
-        # Bullet points
+        # Bullet points - convert to dash
         if text[0] in ["•", "·", "◦", "▪", "▫"]:
             return True, "-", 0
         
-        # Dash bullets
+        # Dash bullets - keep as is
         if text[0] in ["–", "-", "*"] and len(text) > 1 and text[1] == " ":
             return True, "-", 0
 
-        # Roman numerals in parentheses: (i), (ii), (iii), (iv), (v), (vi), (vii), (viii), (ix), (x)
+        # Roman numerals in parentheses: (i), (ii), (iii), (iv), etc.
+        # PRESERVE the original marker for clarity
         roman_match = re.match(r'^\(([ivxlcdm]+)\)\s+', text, re.IGNORECASE)
         if roman_match:
-            # Lowercase roman = nested list (indent level 1)
-            return True, "-", 1
+            original_marker = f"({roman_match.group(1)})"  # Keep as (i), (ii), etc.
+            return True, original_marker, 1  # Still nested (indent level 1)
         
         # Letters in parentheses: (a), (b), (c) or a), b), c)
+        # PRESERVE the original marker
         letter_match = re.match(r'^(\([a-z]\)|[a-z]\))\s+', text)
         if letter_match:
-            # Letters = double-nested list (indent level 2)
-            return True, "-", 2
+            original_marker = letter_match.group(1)  # Keep as (a), a), etc.
+            return True, original_marker, 2  # Double-nested (indent level 2)
         
         # Numbered lists: 1., 2., 3.
         number_match = re.match(r'^(\d+)\.\s+', text)
@@ -774,7 +789,7 @@ class DocumentConverter:
         number_paren_match = re.match(r'^(\d+)\)\s+', text)
         if number_paren_match:
             num = number_paren_match.group(1)
-            return True, f"{num}.", 0
+            return True, f"{num})", 0  # Preserve the paren style
 
         return False, "", 0
     
@@ -806,8 +821,11 @@ class DocumentConverter:
                 # Always add blank line between different types
                 if prev_type != block["type"]:
                     md_lines.append("")  
-                # Add blank line between text blocks (now these are full paragraphs)
+                # Add blank line between text blocks (paragraphs)
                 elif block["type"] == "text":
+                    md_lines.append("")
+                # Add blank line between list items (so non-standard markers like (i) render separately)
+                elif block["type"] == "list":
                     md_lines.append("")
 
             md_lines.append(content)
