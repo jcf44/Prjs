@@ -23,6 +23,46 @@ class DocumentConverter:
         # Doesn't match: "5265 Street Name" (no dots)
         self.numbered_header_pattern = re.compile(r'^(\d+(?:\.\d+)+\.?|\d+\.)\s+')
 
+    def preview_pdf_headers_footers(
+        self,
+        pdf_path: str,
+    ) -> Dict[str, Any]:
+        """
+        Preview headers and footers detected in a PDF without converting.
+
+        Args:
+            pdf_path: Path to the source PDF file.
+
+        Returns:
+            Dictionary containing detected headers, footers, and sample pages
+        """
+        logger.info("Previewing PDF headers/footers", pdf_path=pdf_path)
+
+        pdf_plumber = pdfplumber.open(pdf_path)
+
+        try:
+            # Collect text from all pages for header/footer detection
+            all_pages_text = []
+            for page_num, plumber_page in enumerate(pdf_plumber.pages):
+                chars = plumber_page.chars
+                if chars:
+                    all_pages_text.append({
+                        "page_num": page_num,
+                        "chars": chars,
+                        "height": plumber_page.height
+                    })
+
+            # Detect headers and footers
+            header_footer_text = self._detect_headers_footers(all_pages_text)
+
+            return {
+                "detected_patterns": sorted(list(header_footer_text)),
+                "total_pages": len(pdf_plumber.pages),
+                "pages_analyzed": len(all_pages_text),
+            }
+        finally:
+            pdf_plumber.close()
+
     def convert_pdf_to_markdown(
         self,
         pdf_path: str,
@@ -30,6 +70,7 @@ class DocumentConverter:
         image_output_dir: str,
         public_image_path: str,
         custom_filename: Optional[str] = None,
+        custom_headers_footers: Optional[List[str]] = None,
     ) -> str:
         """
         Convert a PDF file to Markdown with high accuracy using pdfplumber.
@@ -44,11 +85,13 @@ class DocumentConverter:
             image_output_dir: Directory to save extracted images.
             public_image_path: URL prefix/path for images in the markdown.
             custom_filename: Optional custom filename for the output markdown file.
+            custom_headers_footers: Optional list of custom header/footer patterns to exclude.
 
         Returns:
             Path to the generated Markdown file.
         """
-        logger.info("Converting PDF to Markdown (advanced)", pdf_path=pdf_path)
+        logger.info("Converting PDF to Markdown (advanced)", pdf_path=pdf_path,
+                   custom_patterns=len(custom_headers_footers) if custom_headers_footers else 0)
 
         # Ensure directories exist
         os.makedirs(image_output_dir, exist_ok=True)
@@ -73,9 +116,14 @@ class DocumentConverter:
                         "chars": chars,
                         "height": plumber_page.height
                     })
-            
-            # Detect headers and footers
+
+            # Detect headers and footers (automatic detection)
             header_footer_text = self._detect_headers_footers(all_pages_text)
+
+            # Merge with custom user-specified patterns
+            if custom_headers_footers:
+                header_footer_text.update(custom_headers_footers)
+                logger.info(f"Added {len(custom_headers_footers)} custom header/footer patterns")
             
             for page_num, (plumber_page, pymupdf_page) in enumerate(
                 zip(pdf_plumber.pages, pdf_pymupdf)
@@ -256,34 +304,35 @@ class DocumentConverter:
 
     def _detect_headers_footers(self, all_pages_text: List[Dict]) -> set:
         """Detect repeated headers and footers across pages.
-        
+
         Returns:
             Set of text strings that appear to be headers or footers
         """
-        if len(all_pages_text) < 3:
-            return set()  # Need at least 3 pages to reliably detect headers/footers
-        
+        if len(all_pages_text) < 2:
+            return set()  # Need at least 2 pages to detect headers/footers
+
         # Collect text from top and bottom of each page
-        top_texts = []  # First 15% of page
-        bottom_texts = []  # Last 15% of page
-        
+        top_texts = []
+        bottom_texts = []
+
         for page_data in all_pages_text:
             chars = page_data["chars"]
             height = page_data["height"]
-            
-            # Header zone: top 20% of page (widened from 15%)
+
+            # Expanded zones to catch multi-line headers/footers
+            # Header zone: top 20% of page (expanded from 15%)
             header_zone_limit = height * 0.20
-            # Footer zone: bottom 20% of page (widened from 15%)
+            # Footer zone: bottom 20% of page (expanded from 15%)
             footer_zone_start = height * 0.80
-            
+
             # Group characters into lines for this page
             header_lines = []
             footer_lines = []
-            
+
             # Simple line grouping by Y position
             current_line = []
             prev_y = None
-            
+
             for char in sorted(chars, key=lambda c: (c["top"], c["x0"])):
                 if prev_y is None or abs(char["top"] - prev_y) < 3:
                     current_line.append(char["text"])
@@ -296,7 +345,7 @@ class DocumentConverter:
                             footer_lines.append(line_text)
                     current_line = [char["text"]]
                 prev_y = char["top"]
-            
+
             # Don't forget the last line
             if current_line:
                 line_text = "".join(current_line).strip()
@@ -305,32 +354,33 @@ class DocumentConverter:
                         header_lines.append(line_text)
                     elif prev_y >= footer_zone_start:
                         footer_lines.append(line_text)
-            
+
             top_texts.append(header_lines)
             bottom_texts.append(footer_lines)
-        
-        # Find text that appears in most pages (>= 30% of pages)
-        # Lower threshold catches headers/footers that might not appear on all pages
-        repeated_threshold = max(2, int(len(all_pages_text) * 0.3))  # At least 2 pages, or 30%
+
+        # Find text that appears in multiple pages
+        # Lower threshold: if appears on 2+ pages (or 30% of pages for larger docs, minimum 2)
+        # This catches headers/footers that might not appear on every page
+        min_occurrences = 2 if len(all_pages_text) <= 5 else max(2, int(len(all_pages_text) * 0.3))
         headers_footers = set()
-        
+
         # Count occurrences of each text in headers
         from collections import Counter
         all_header_texts = [text for page_headers in top_texts for text in page_headers]
         header_counts = Counter(all_header_texts)
-        
+
         for text, count in header_counts.items():
-            if count >= repeated_threshold and len(text) > 3:  # At least 4 characters
+            if count >= min_occurrences and len(text) > 2:  # At least 3 characters
                 headers_footers.add(text)
-        
+
         # Count occurrences of each text in footers
         all_footer_texts = [text for page_footers in bottom_texts for text in page_footers]
         footer_counts = Counter(all_footer_texts)
-        
+
         for text, count in footer_counts.items():
-            if count >= repeated_threshold and len(text) > 3:
+            if count >= min_occurrences and len(text) > 2:
                 headers_footers.add(text)
-        
+
         # Also detect patterns with numbers (e.g., "Execution Copy (PRC004692) 7" -> "Execution Copy (PRC004692)")
         # Normalize by removing trailing numbers and check for patterns
         def normalize_text(text):
@@ -339,30 +389,32 @@ class DocumentConverter:
             normalized = re.sub(r'\s+\d+\s*$', '', text)  # Trailing numbers
             normalized = re.sub(r'\s+page\s+\d+\s*$', '', normalized, flags=re.IGNORECASE)
             normalized = re.sub(r'\s+-\s+\d+\s*$', '', normalized)
+            normalized = re.sub(r'^page\s+\d+\s*$', '', normalized, flags=re.IGNORECASE)  # Just "Page X"
             return normalized.strip()
-        
+
         # Collect normalized versions of all header/footer texts
         normalized_header_texts = [normalize_text(text) for text in all_header_texts]
         normalized_footer_texts = [normalize_text(text) for text in all_footer_texts]
-        
+
         normalized_header_counts = Counter(normalized_header_texts)
         normalized_footer_counts = Counter(normalized_footer_texts)
-        
+
         # Add normalized patterns that appear frequently
         for normalized, count in normalized_header_counts.items():
-            if count >= repeated_threshold and len(normalized) > 3:
+            if count >= min_occurrences and len(normalized) > 2:
                 # Add all original texts that match this pattern
                 for original in all_header_texts:
                     if normalize_text(original) == normalized:
                         headers_footers.add(original)
-        
+
         for normalized, count in normalized_footer_counts.items():
-            if count >= repeated_threshold and len(normalized) > 3:
+            if count >= min_occurrences and len(normalized) > 2:
                 for original in all_footer_texts:
                     if normalize_text(original) == normalized:
                         headers_footers.add(original)
-        
-        logger.info(f"Detected {len(headers_footers)} header/footer texts to exclude")
+
+        logger.info(f"Detected {len(headers_footers)} header/footer texts to exclude",
+                   header_footer_samples=list(headers_footers)[:10] if headers_footers else [])
         return headers_footers
 
     def _extract_text_with_layout(
@@ -408,7 +460,39 @@ class DocumentConverter:
             filtered_lines = []
             for line in lines:
                 line_text = line["text"].strip()
-                if line_text not in header_footer_text:
+                # Check exact match
+                if line_text in header_footer_text:
+                    continue
+                # Check if the line is composed mainly of header/footer text
+                # This handles cases where header/footer text is at the start or end
+                is_header_footer = False
+                for hf_text in header_footer_text:
+                    if len(hf_text) > 10:  # Only check substantial headers/footers
+                        # If header/footer text comprises >60% of the line, skip it (lowered from 70%)
+                        if hf_text in line_text and len(hf_text) / len(line_text) > 0.6:
+                            is_header_footer = True
+                            break
+                    elif len(hf_text) > 5:
+                        # For medium-length texts, check if they're a significant part
+                        if hf_text in line_text and len(hf_text) / len(line_text) > 0.5:
+                            is_header_footer = True
+                            break
+
+                # Additional pattern-based checks for common header/footer patterns
+                if not is_header_footer:
+                    # Check for standalone short lines that are likely headers/footers
+                    if len(line_text) < 50:
+                        # Common patterns: "Execution Copy (XXX) N", "Document Title N", etc.
+                        if re.match(r'^.+\s+\d+\s*$', line_text):  # Text ending with number
+                            # If this matches any header/footer when normalized
+                            normalized = re.sub(r'\s+\d+\s*$', '', line_text).strip()
+                            for hf_text in header_footer_text:
+                                hf_normalized = re.sub(r'\s+\d+\s*$', '', hf_text).strip()
+                                if normalized == hf_normalized:
+                                    is_header_footer = True
+                                    break
+
+                if not is_header_footer:
                     filtered_lines.append(line)
             lines = filtered_lines
         
@@ -521,6 +605,47 @@ class DocumentConverter:
             "fontname": sorted_words[0]["fontname"],
         }
 
+    def _is_line_header_footer(self, line_text: str, header_footer_text: set) -> bool:
+        """Check if a line of text is a header or footer.
+
+        Args:
+            line_text: The text to check
+            header_footer_text: Set of known header/footer texts
+
+        Returns:
+            True if the line is a header/footer, False otherwise
+        """
+        if not header_footer_text:
+            return False
+
+        # Check exact match
+        if line_text in header_footer_text:
+            return True
+
+        # Check if the line is mainly header/footer text
+        for hf_text in header_footer_text:
+            if len(hf_text) > 10:  # Substantial headers/footers
+                if hf_text in line_text and len(hf_text) / len(line_text) > 0.6:
+                    return True
+            elif len(hf_text) > 5:  # Medium-length texts
+                if hf_text in line_text and len(hf_text) / len(line_text) > 0.5:
+                    return True
+            elif line_text == hf_text:  # Short texts need exact match
+                return True
+
+        # Additional pattern-based checks for common header/footer patterns
+        if len(line_text) < 50:
+            # Common patterns: "Execution Copy (XXX) N", "Document Title N", etc.
+            if re.match(r'^.+\s+\d+\s*$', line_text):  # Text ending with number
+                # If this matches any header/footer when normalized
+                normalized = re.sub(r'\s+\d+\s*$', '', line_text).strip()
+                for hf_text in header_footer_text:
+                    hf_normalized = re.sub(r'\s+\d+\s*$', '', hf_text).strip()
+                    if normalized == hf_normalized:
+                        return True
+
+        return False
+
     def _group_lines_into_blocks(
         self, lines: List[Dict], avg_font_size: float, header_footer_text: set = None
     ) -> List[Dict]:
@@ -531,7 +656,7 @@ class DocumentConverter:
         """
         if not lines:
             return []
-        
+
         if header_footer_text is None:
             header_footer_text = set()
         
@@ -581,22 +706,12 @@ class DocumentConverter:
                     if not next_text:
                         i += 1
                         continue
-                    
-                    # Skip if this line is a header/footer (check exact match or if it contains header/footer)
-                    is_header_footer = False
-                    if next_text in header_footer_text:
-                        is_header_footer = True
-                    else:
-                        # Also check if any header/footer appears as a substring
-                        for hf_text in header_footer_text:
-                            if hf_text in next_text or next_text in hf_text:
-                                is_header_footer = True
-                                break
-                    
-                    if is_header_footer:
+
+                    # Skip if this line is a header/footer
+                    if self._is_line_header_footer(next_text, header_footer_text):
                         i += 1
                         continue
-                    
+
                     next_is_header, _ = self._detect_header(next_line, avg_font_size, len(next_text))
                     next_is_list, _, _ = self._detect_list_type(next_text)
                     
@@ -641,22 +756,12 @@ class DocumentConverter:
                     if not next_text:
                         i += 1
                         continue
-                    
-                    # Skip if this line is a header/footer (check exact match or substring)
-                    is_header_footer = False
-                    if next_text in header_footer_text:
-                        is_header_footer = True
-                    else:
-                        # Also check if any header/footer appears as a substring
-                        for hf_text in header_footer_text:
-                            if hf_text in next_text or next_text in hf_text:
-                                is_header_footer = True
-                                break
-                    
-                    if is_header_footer:
+
+                    # Skip if this line is a header/footer
+                    if self._is_line_header_footer(next_text, header_footer_text):
                         i += 1
                         continue
-                    
+
                     next_is_header, _ = self._detect_header(next_line, avg_font_size, len(next_text))
                     next_is_list, _, _ = self._detect_list_type(next_text)
                     

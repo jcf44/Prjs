@@ -112,6 +112,12 @@ export const voiceApi = {
   testTts: (text: string) => api.post(`/voice/test/tts?text=${encodeURIComponent(text)}`),
 };
 
+export interface HeaderFooterPreview {
+  detected_patterns: string[];
+  total_pages: number;
+  pages_analyzed: number;
+}
+
 export const documentsApi = {
   list: (projectId: string = 'default') => api.get<Document[]>('/documents/', { params: { project_id: projectId } }),
   upload: async (file: File, projectId: string = 'default') => {
@@ -125,8 +131,13 @@ export const documentsApi = {
   delete: (sourceId: string) => api.delete(`/documents/${sourceId}`),
   query: (query: string, nResults: number = 5, projectId: string = 'default') =>
     api.post('/documents/query', { query, n_results: nResults, project_id: projectId }),
-  convert: (sourceId: string, projectId: string = 'default') =>
-    api.post(`/documents/${sourceId}/convert`, null, { params: { project_id: projectId } }),
+  previewHeaders: (sourceId: string) =>
+    api.get<HeaderFooterPreview>(`/documents/${sourceId}/preview-headers`),
+  convert: (sourceId: string, projectId: string = 'default', customHeadersFooters?: string[]) =>
+    api.post(`/documents/${sourceId}/convert`, {
+      project_id: projectId,
+      custom_headers_footers: customHeadersFooters,
+    }),
   download: async (sourceId: string, filename: string) => {
     const response = await api.get(`/documents/${sourceId}/download`, {
       responseType: 'blob',

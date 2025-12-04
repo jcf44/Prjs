@@ -8,12 +8,15 @@ import { FileText, Trash2, Upload, FileCode, FileImage, FileSpreadsheet, FileTyp
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { ExcelIcon, MarkdownIcon, PdfIcon, WordIcon } from "./DocIcons";
+import { HeaderFooterDialog } from "./HeaderFooterDialog";
 
 import { useStore } from "@/lib/store";
 
 export function DocumentList() {
     const [isUploading, setIsUploading] = useState(false);
     const [convertingIds, setConvertingIds] = useState<Set<string>>(new Set());
+    const [headerDialogOpen, setHeaderDialogOpen] = useState(false);
+    const [selectedDocForConversion, setSelectedDocForConversion] = useState<string | null>(null);
     const { currentProject, focusedDocumentId, setFocusedDocumentId, documents, setDocuments } = useStore();
 
     useEffect(() => {
@@ -75,14 +78,19 @@ export function DocumentList() {
         }
     };
 
-    const handleConvert = async (docId: string) => {
-        if (!currentProject) return;
+    const handleConvertClick = (docId: string) => {
+        setSelectedDocForConversion(docId);
+        setHeaderDialogOpen(true);
+    };
 
-        setConvertingIds(prev => new Set(prev).add(docId));
+    const handleConvert = async (customPatterns: string[]) => {
+        if (!currentProject || !selectedDocForConversion) return;
+
+        setConvertingIds(prev => new Set(prev).add(selectedDocForConversion));
         toast.info("Converting document to Markdown...");
 
         try {
-            await documentsApi.convert(docId, currentProject.project_id);
+            await documentsApi.convert(selectedDocForConversion, currentProject.project_id, customPatterns);
             toast.success("Conversion successful");
             loadDocuments();
         } catch (error) {
@@ -91,9 +99,10 @@ export function DocumentList() {
         } finally {
             setConvertingIds(prev => {
                 const next = new Set(prev);
-                next.delete(docId);
+                next.delete(selectedDocForConversion);
                 return next;
             });
+            setSelectedDocForConversion(null);
         }
     };
 
@@ -200,7 +209,7 @@ export function DocumentList() {
                                             variant="ghost"
                                             size="icon"
                                             className="h-8 w-8 text-muted-foreground hover:text-primary opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                                            onClick={() => handleConvert(doc.source_id)}
+                                            onClick={() => handleConvertClick(doc.source_id)}
                                             disabled={convertingIds.has(doc.source_id)}
                                             title="Convert to Markdown"
                                         >
@@ -248,6 +257,17 @@ export function DocumentList() {
                     )}
                 </div>
             </ScrollArea>
+
+            {/* Header/Footer Selection Dialog */}
+            {selectedDocForConversion && currentProject && (
+                <HeaderFooterDialog
+                    open={headerDialogOpen}
+                    onOpenChange={setHeaderDialogOpen}
+                    documentId={selectedDocForConversion}
+                    projectId={currentProject.project_id}
+                    onConvert={handleConvert}
+                />
+            )}
         </div>
     );
 }

@@ -107,20 +107,48 @@ async def delete_document(
                 
     return {"status": "deleted", "source_id": source_id}
 
+@router.get("/{source_id}/preview-headers")
+async def preview_headers_footers(
+    source_id: str,
+    vector_db: VectorDBService = Depends(get_vector_db_service),
+    converter: DocumentConverter = Depends(get_converter_service)
+):
+    """Preview detected headers and footers in a PDF document before conversion"""
+    # Get original file path
+    file_path = await vector_db.get_document_path(source_id)
+    if not file_path or not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Original document file not found")
+
+    if not file_path.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF documents can be previewed")
+
+    try:
+        preview_data = converter.preview_pdf_headers_footers(file_path)
+        return preview_data
+    except Exception as e:
+        logger.error("Header/footer preview failed", error=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class ConvertDocumentRequest(BaseModel):
+    project_id: str = "default"
+    custom_headers_footers: Optional[List[str]] = None
+
+
 @router.post("/{source_id}/convert")
 async def convert_document(
     source_id: str,
-    project_id: str = "default",
+    request: ConvertDocumentRequest,
     vector_db: VectorDBService = Depends(get_vector_db_service),
     converter: DocumentConverter = Depends(get_converter_service),
     ingestion_service: IngestionService = Depends(get_ingestion_service)
 ):
-    """Convert a PDF document to Markdown"""
+    """Convert a PDF document to Markdown with optional custom header/footer exclusions"""
     # 1. Get original file path
     file_path = await vector_db.get_document_path(source_id)
     if not file_path or not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="Original document file not found")
-        
+
     if not file_path.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF documents can be converted")
 
@@ -168,28 +196,29 @@ async def convert_document(
         # Create new filename: Original Name.md
         new_filename = os.path.splitext(original_user_filename)[0] + ".md"
         
-        # 3. Perform conversion
+        # 3. Perform conversion with custom headers/footers if provided
         md_path = converter.convert_pdf_to_markdown(
             pdf_path=file_path,
             output_dir=documents_dir,
             image_output_dir=image_output_dir,
             public_image_path=public_image_path,
-            custom_filename=new_filename
+            custom_filename=new_filename,
+            custom_headers_footers=request.custom_headers_footers
         )
-        
+
         # 4. Ingest the new Markdown file
         new_source_id = await ingestion_service.process_file(
             file_path=md_path,
             user_profile="default", # Should ideally get from request/context
-            project_id=project_id,
+            project_id=request.project_id,
             metadata={"original_filename": new_filename, "converted_from": source_id}
         )
-        
+
         return {
-            "status": "success", 
-            "source_id": new_source_id, 
+            "status": "success",
+            "source_id": new_source_id,
             "filename": new_filename,
-            "project_id": project_id
+            "project_id": request.project_id
         }
         
     except Exception as e:
