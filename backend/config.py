@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     
     # RAG
     CHROMA_DB_PATH: str = os.path.join(os.path.expanduser("~"), ".wendy", "chroma_db")
+    CORPUS_DIRECTORY: str = os.path.join(os.path.expanduser("~"), ".wendy", "corpus")
     
     # Voice
     SHERPA_KWS_MODEL_PATH: str = "" # Path to KWS model directory

@@ -1,0 +1,6 @@
+requirement_id,title,description,category,priority,status,source_reference,parent_requirement_id,tags,source_docs,design_docs,implementation_docs,verification_docs,reference_docs
+REQ-001,Real-time Location Tracking,The system shall provide real-time location tracking with sub-second updates,Functional,must,approved,RFP Section 3.1,,rtls;tracking;core,RFP_SmartSpace.pdf,Architecture.md;RTLS_Design.docx,,TestCase_RTLS_001.md,
+REQ-002,API Response Time,API response time shall be less than 100ms for 95th percentile,Non-Functional,must,in_progress,SLA Document 2.3,REQ-001,performance;api,SLA.pdf,API_Spec.md,/src/api/handlers.py,Performance_Tests.md,
+REQ-003,Multi-zone Support,System shall support multiple tracking zones with independent configurations,Functional,should,draft,RFP Section 3.2,,zones;config,RFP_SmartSpace.pdf,Zone_Architecture.md,,,
+REQ-004,User Authentication,Users must authenticate via OAuth 2.0 or SAML,Security,must,implemented,Security Requirements 1.1,,security;auth,Security_Requirements.docx,Auth_Design.md,/src/auth/oauth.py,Auth_TestCases.md,OAuth_RFC.pdf
+REQ-005,Data Export,System shall support data export in CSV and JSON formats,Functional,could,draft,Feature Request FR-42,,export;data,Feature_Request_FR42.pdf,Export_Design.md,,,
